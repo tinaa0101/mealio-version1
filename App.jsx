@@ -110,13 +110,39 @@ function dietFilter(diet) {
 }
 function scoreDish(d, avail, expiring, time, energy, diet, isFav, lkeys) {
   let s = 0;
-  s += d.uses.filter(u=>expiring.includes(u)).length * 6;
-  s += d.uses.filter(u=>avail.includes(u)).length * 0.8;
-  s -= Math.abs(d.energy-energy)*9;
-  s -= d.time>time?(d.time-time)*2.2:Math.abs(time-d.time)*0.15;
-  if (diet==="highprotein") s+=d.protein*0.5;
-  if (isFav) s+=10;
-  lkeys.forEach(k=>{ if(d.name.toLowerCase().includes(k)) s+=8; });
+
+  // ── TIER 1: Leftover transform match (homemaker's first instinct) ──────────
+  lkeys.forEach(k => { if (d.name.toLowerCase().includes(k)) s += 60; });
+
+  // ── TIER 2: Ingredient coverage ratio ─────────────────────────────────────
+  // "What can I make with what I already have at home?"
+  // A dish where you have 4/4 ingredients beats one where you have 1/4.
+  const have    = d.uses.filter(u => avail.includes(u)).length;
+  const total   = d.uses.length || 1;
+  const ratio   = have / total;          // 0.0 → 1.0
+  s += ratio * 50;                       // full coverage = 50 pts
+
+  // ── TIER 3: Expiring ingredient urgency ───────────────────────────────────
+  // "Use before it goes bad" is always a homemaker's top concern.
+  s += d.uses.filter(u => expiring.includes(u)).length * 22;
+
+  // ── TIER 4: Missing items penalty ─────────────────────────────────────────
+  // Dishes needing a grocery run rank lower — not impossible, just behind.
+  s -= d.uses.filter(u => !avail.includes(u)).length * 9;
+
+  // ── TIER 5: Energy & time match ───────────────────────────────────────────
+  s -= Math.abs(d.energy - energy) * 10;
+  if (d.time > time) s -= (d.time - time) * 1.5;   // penalise only if over
+
+  // ── TIER 6: Dietary preference signal ────────────────────────────────────
+  if (diet === "highprotein") s += d.protein * 0.4;
+
+  // ── TIER 7: Favourites ────────────────────────────────────────────────────
+  if (isFav) s += 15;
+
+  // ── Tiny random tie-breaker (prevents identical results on every re-run) ──
+  s += Math.random() * 4;
+
   return s;
 }
 function rankDishes(slot, avail, expiring, time, energy, diet, veg, favs, lkeys) {
@@ -279,35 +305,60 @@ function SplashScreen({onDone}){
   const [p,setP]=useState(0);
   useEffect(()=>{
     const t0=Date.now(),tot=5000;
-    const tick=()=>{const v=Math.min((Date.now()-t0)/tot,1);setP(v);if(v<1)requestAnimationFrame(tick);else setTimeout(onDone,200);};
+    const tick=()=>{const v=Math.min((Date.now()-t0)/tot,1);setP(v);if(v<1)requestAnimationFrame(tick);else setTimeout(onDone,250);};
     requestAnimationFrame(tick);
   },[]);
+  const BOXES=[{e:"🧠",l:"Thinks\nfor you"},{e:"🥕",l:"Uses what's\nalready home"},{e:"⚡",l:"Matches\nyour energy"}];
   return (
     <div style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",
       justifyContent:"center",background:`radial-gradient(ellipse at 30% 40%,#3A3090,${C.dark1} 60%)`,
-      padding:"0 32px",textAlign:"center",isolation:"isolate",position:"relative"}}>
-      <GlowBlob color={C.indigo}  opacity={0.18} blur={60} x="18%" y="16%" size={220}/>
-      <GlowBlob color={C.saffron} opacity={0.20} blur={50} x="58%" y="26%" size={180}/>
-      <GlowBlob color={C.red}     opacity={0.16} blur={55} x="30%" y="56%" size={160}/>
-      <div style={{position:"relative",zIndex:1,display:"flex",flexDirection:"column",alignItems:"center"}}>
-        <MealioLogo size={130} showText textSize={46}/>
-        <div style={{marginTop:44,display:"flex",gap:12}}>
-          {[{e:"🧠",l:"Thinks for you"},{e:"🥕",l:"Uses what's home"},{e:"⚡",l:"Matches your energy"}].map(i=>(
-            <div key={i.l} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:6,
-              background:"rgba(255,255,255,0.08)",borderRadius:14,padding:"12px 10px",
-              border:"0.5px solid rgba(255,255,255,0.12)"}}>
-              <span style={{fontSize:22}}>{i.e}</span>
-              <span style={{fontSize:10,color:"rgba(255,255,255,0.7)",
-                fontFamily:"'Nunito',sans-serif",fontWeight:600}}>{i.l}</span>
+      padding:"0 28px",textAlign:"center",isolation:"isolate",position:"relative",overflow:"hidden"}}>
+
+      {/* Animated glow blobs — pulse breathing effect */}
+      {[{c:C.indigo,x:"18%",y:"12%",s:240},{c:C.saffron,x:"54%",y:"24%",s:200},{c:C.red,x:"28%",y:"54%",s:180}].map((g,i)=>(
+        <div key={i} style={{position:"absolute",top:g.y,left:g.x,width:g.s,height:g.s,
+          borderRadius:"50%",background:g.c,opacity:0.18,filter:"blur(64px)",pointerEvents:"none",
+          animation:`glowPulse ${2.8+i*0.7}s ease-in-out ${i*0.4}s infinite`}}/>
+      ))}
+
+      <div style={{position:"relative",zIndex:1,display:"flex",flexDirection:"column",alignItems:"center",width:"100%"}}>
+
+        {/* Logo — scale bounce reveal like Myntra/Zepto */}
+        <div style={{animation:"logoReveal 0.75s cubic-bezier(0.34,1.56,0.64,1) 0.1s both"}}>
+          <MealioLogo size={130} showText textSize={46}/>
+        </div>
+
+        {/* Three info boxes — equal size, staggered slide-up */}
+        <div style={{marginTop:40,display:"flex",gap:10,width:"100%",maxWidth:340}}>
+          {BOXES.map((item,i)=>(
+            <div key={i} style={{
+              flex:"1 1 0",minWidth:0,
+              display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",
+              gap:8,background:"rgba(255,255,255,0.09)",borderRadius:16,padding:"16px 8px",
+              border:"0.5px solid rgba(255,255,255,0.14)",
+              animation:`fadeSlideUp 0.5s ease ${0.55+i*0.14}s both`,
+              textAlign:"center",minHeight:88
+            }}>
+              <span style={{fontSize:24,lineHeight:1}}>{item.e}</span>
+              <span style={{fontSize:10,color:"rgba(255,255,255,0.72)",
+                fontFamily:"'Nunito',sans-serif",fontWeight:700,
+                lineHeight:1.45,whiteSpace:"pre-line",letterSpacing:"0.01em"}}>{item.l}</span>
             </div>
           ))}
         </div>
-        <div style={{marginTop:52,width:160,height:4,borderRadius:2,background:"rgba(255,255,255,0.14)",overflow:"hidden"}}>
+
+        {/* Progress bar — shimmer animation like BookMyShow */}
+        <div style={{marginTop:48,width:160,height:4,borderRadius:2,
+          background:"rgba(255,255,255,0.12)",overflow:"hidden"}}>
           <div style={{height:"100%",borderRadius:2,
-            background:`linear-gradient(90deg,${C.indigo},${C.saffron})`,
-            width:`${p*100}%`,transition:"width 0.1s linear"}}/>
+            background:`linear-gradient(90deg,${C.indigo},${C.saffron},${C.red})`,
+            backgroundSize:"200% auto",
+            width:`${p*100}%`,transition:"width 0.12s linear",
+            animation:"shimmerBar 1.8s linear infinite"}}/>
         </div>
-        <p style={{marginTop:12,fontSize:11,color:"rgba(255,255,255,0.35)",fontFamily:"'Nunito',sans-serif"}}>Loading your kitchen brain…</p>
+        <p style={{marginTop:10,fontSize:11,color:"rgba(255,255,255,0.32)",
+          fontFamily:"'Nunito',sans-serif",animation:"fadeSlideUp 0.5s ease 0.9s both"}}>
+          Loading your kitchen brain…</p>
       </div>
     </div>
   );
@@ -886,32 +937,73 @@ function NutritionCard({dish,addOns}){
   );
 }
 function MissingGroceries({items}){
-  if(!items.length)return(
-    <p style={{fontSize:12,color:"#4A5429",display:"flex",alignItems:"center",gap:6,marginTop:10}}>
+  const [open,setOpen]=useState(false);
+  if(!items.length) return (
+    <p style={{fontSize:12,color:"#4A7040",display:"flex",alignItems:"center",gap:6,marginTop:10,
+      fontWeight:600,fontFamily:"'Nunito',sans-serif"}}>
       <Check size={13}/>You have everything for this!</p>
   );
   return (
-    <div style={{borderRadius:14,padding:12,marginTop:12,background:"#FBF5EA",border:"1px solid #EDD9A0"}}>
-      <p style={{fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.06em",
-        color:"#8A7020",margin:"0 0 8px",display:"flex",alignItems:"center",gap:6}}>
-        <ShoppingBag size={13}/>Missing groceries?</p>
-      {items.map(item=>(
-        <div key={item} style={{display:"flex",alignItems:"center",justifyContent:"space-between",
-          paddingBottom:6,marginBottom:6,borderBottom:`1px solid #EDD9A0`}}>
-          <span style={{fontSize:13,color:C.ink,display:"flex",alignItems:"center",gap:6}}>
-            <span>{ING_EMOJI[item]||"🛒"}</span>{item}
-          </span>
-          <div style={{display:"flex",gap:6}}>
-            {DELIVERY_APPS.map(app=>(
-              <a key={app.key} href={app.url(item)} target="_blank" rel="noopener noreferrer"
-                style={{fontSize:10,fontWeight:700,padding:"3px 8px",borderRadius:10,textDecoration:"none",
-                  border:`1px solid ${app.color}55`,color:app.color,background:`${app.color}12`}}>
-                {app.label}
-              </a>
-            ))}
-          </div>
+    <div style={{marginTop:12}}>
+      {/* Missing ingredient tags — clean, no buttons */}
+      <div style={{display:"flex",alignItems:"flex-start",gap:6,flexWrap:"wrap",marginBottom:10}}>
+        <div style={{display:"flex",alignItems:"center",gap:4,marginRight:2,paddingTop:3}}>
+          <ShoppingBag size={12} color="#8A7020"/>
+          <span style={{fontSize:11,fontWeight:700,color:"#8A7020",textTransform:"uppercase",
+            letterSpacing:"0.06em",whiteSpace:"nowrap"}}>Need to buy:</span>
         </div>
-      ))}
+        {items.map(item=>(
+          <span key={item} style={{display:"inline-flex",alignItems:"center",gap:4,
+            fontSize:12,padding:"4px 10px",borderRadius:20,fontWeight:600,
+            background:"#FBF5EA",border:"1px solid #EDD9A0",color:"#5A4010"}}>
+            {ING_EMOJI[item]&&<span style={{fontSize:14,lineHeight:1}}>{ING_EMOJI[item]}</span>}
+            {item}
+          </span>
+        ))}
+      </div>
+
+      {/* Single "Order Online" CTA — no repetition */}
+      <button onClick={()=>setOpen(o=>!o)} style={{
+        display:"flex",alignItems:"center",justifyContent:"space-between",
+        width:"100%",padding:"11px 14px",borderRadius:14,cursor:"pointer",
+        border:"1.5px dashed #C98A1E",background:"#FFFBEF",
+        transition:"background 0.2s"}}>
+        <span style={{display:"flex",alignItems:"center",gap:8,fontSize:13,
+          fontWeight:700,color:"#8A6010",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+          🛒 Order {items.length} item{items.length>1?"s":""} online
+        </span>
+        <span style={{fontSize:12,color:"#C98A1E",transition:"transform 0.2s",
+          display:"inline-block",transform:open?"rotate(180deg)":"rotate(0deg)"}}>▼</span>
+      </button>
+
+      {/* Expandable delivery app list — clean rows, brand accent on left */}
+      {open&&(
+        <div style={{marginTop:6,borderRadius:14,overflow:"hidden",
+          border:"1px solid #EDD9A0",background:"white",
+          animation:"fadeSlideUp 0.2s ease both"}}>
+          <div style={{padding:"10px 14px 6px",fontSize:11,color:"#8A7020",
+            fontFamily:"'Nunito',sans-serif",borderBottom:"1px solid #F5EDDC"}}>
+            Choose where to order — tap to open app
+          </div>
+          {DELIVERY_APPS.map((app,i)=>(
+            <a key={app.key}
+              href={app.url(items.join(" "))} target="_blank" rel="noopener noreferrer"
+              style={{display:"flex",alignItems:"center",gap:12,padding:"13px 14px",
+                textDecoration:"none",
+                borderBottom:i<DELIVERY_APPS.length-1?"1px solid #F5EDDC":"none",
+                borderLeft:`4px solid ${app.color}`,background:"white",
+                transition:"background 0.15s"}}>
+              <div style={{width:8,height:8,borderRadius:"50%",
+                background:app.color,flexShrink:0}}/>
+              <span style={{flex:1,fontSize:14,fontWeight:700,
+                color:C.ink,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>{app.label}</span>
+              <span style={{fontSize:12,color:C.muted,fontFamily:"'Nunito',sans-serif"}}>
+                Search {items.length} item{items.length>1?"s":""}</span>
+              <span style={{fontSize:16,color:app.color,fontWeight:700}}>→</span>
+            </a>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -1115,6 +1207,12 @@ export default function Mealio(){
         .material-symbols-outlined{font-family:'Material Symbols Outlined';}
         input::placeholder{color:#8A6A5A;opacity:0.65;}
         button:active{opacity:0.8;transform:scale(0.97);}
+        @keyframes logoReveal{0%{opacity:0;transform:scale(0.55) translateY(24px);}65%{transform:scale(1.07) translateY(-5px);opacity:1;}85%{transform:scale(0.97) translateY(2px);}100%{opacity:1;transform:scale(1) translateY(0);}}
+        @keyframes fadeSlideUp{0%{opacity:0;transform:translateY(18px);}100%{opacity:1;transform:translateY(0);}}
+        @keyframes taglineIn{0%{opacity:0;letter-spacing:0.22em;}100%{opacity:0.72;letter-spacing:0.07em;}}
+        @keyframes glowPulse{0%,100%{opacity:0.16;transform:scale(1);}50%{opacity:0.26;transform:scale(1.12);}}
+        @keyframes shimmerBar{0%{background-position:-200% center;}100%{background-position:200% center;}}
+        @keyframes spin{to{transform:rotate(360deg)}}
       `}</style>
       <div style={{maxWidth:430,margin:"0 auto",minHeight:"100vh",position:"relative",overflow:"hidden"}}>
         {screen==="splash"     && <SplashScreen     onDone={()=>go("onboarding")}/>}
