@@ -110,21 +110,55 @@ function dietFilter(diet) {
 }
 function scoreDish(d, avail, expiring, time, energy, diet, isFav, lkeys) {
   let s = 0;
-  s += d.uses.filter(u=>expiring.includes(u)).length * 6;
-  s += d.uses.filter(u=>avail.includes(u)).length * 0.8;
-  s -= Math.abs(d.energy-energy)*9;
-  s -= d.time>time?(d.time-time)*2.2:Math.abs(time-d.time)*0.15;
-  if (diet==="highprotein") s+=d.protein*0.5;
-  if (isFav) s+=10;
-  lkeys.forEach(k=>{ if(d.name.toLowerCase().includes(k)) s+=8; });
+
+  // ── TIER 1: Leftover transform match (homemaker's first instinct) ──────────
+  lkeys.forEach(k => { if (d.name.toLowerCase().includes(k)) s += 60; });
+
+  // ── TIER 2: Ingredient coverage ratio ─────────────────────────────────────
+  // "What can I make with what I already have at home?"
+  // A dish where you have 4/4 ingredients beats one where you have 1/4.
+  const have    = d.uses.filter(u => avail.includes(u)).length;
+  const total   = d.uses.length || 1;
+  const ratio   = have / total;          // 0.0 → 1.0
+  s += ratio * 50;                       // full coverage = 50 pts
+
+  // ── TIER 3: Expiring ingredient urgency ───────────────────────────────────
+  // "Use before it goes bad" is always a homemaker's top concern.
+  s += d.uses.filter(u => expiring.includes(u)).length * 22;
+
+  // ── TIER 4: Missing items penalty ─────────────────────────────────────────
+  // Dishes needing a grocery run rank lower — not impossible, just behind.
+  s -= d.uses.filter(u => !avail.includes(u)).length * 9;
+
+  // ── TIER 5: Energy & time match ───────────────────────────────────────────
+  s -= Math.abs(d.energy - energy) * 10;
+  if (d.time > time) s -= (d.time - time) * 1.5;   // penalise only if over
+
+  // ── TIER 6: Dietary preference signal ────────────────────────────────────
+  if (diet === "highprotein") s += d.protein * 0.4;
+
+  // ── TIER 7: Favourites ────────────────────────────────────────────────────
+  if (isFav) s += 15;
+
+  // ── Tiny random tie-breaker (prevents identical results on every re-run) ──
+  s += Math.random() * 4;
+
   return s;
 }
 function rankDishes(slot, avail, expiring, time, energy, diet, veg, favs, lkeys) {
+  // CRITICAL: build implied availability from veg preference.
+  // An eggetarian household almost always has eggs; nonveg always has eggs.
+  // Without this, egg dishes score near-zero because eggs aren't in pantry.
+  const impliedAvail = [...avail];
+  if ((veg==="eggetarian"||veg==="nonveg") && !impliedAvail.includes("eggs")) impliedAvail.push("eggs");
+  if ((veg==="nonveg") && !impliedAvail.includes("chicken breast")) {
+    // don't auto-add chicken — that needs explicit selection — but do boost egg
+  }
   let pool = DISHES[slot].filter(vegFilter(veg)).filter(dietFilter(diet));
   if (pool.length<3) pool = DISHES[slot].filter(vegFilter(veg));
   if (pool.length===0) pool = DISHES[slot];
   return pool
-    .map(d=>({...d, score:scoreDish(d,avail,expiring,time,energy,diet,favs.includes(d.name),lkeys)}))
+    .map(d=>({...d, score:scoreDish(d,impliedAvail,expiring,time,energy,diet,favs.includes(d.name),lkeys)}))
     .sort((a,b)=>b.score-a.score);
 }
 function currentSlot() {
@@ -197,6 +231,8 @@ const DISHES = {
     {name:"Spinach Dal + Rice",    time:30,energy:2,uses:["spinach","moong dal","rice"],          protein:14,carb:55,fat:6, kcal:340,micros:["Iron","Vit A"],        isKeto:false,isGF:true, isDiabetic:false,isVegan:true, note:"Spinach won't survive the week"},
     {name:"Paneer Bhurji + Roti",  time:25,energy:2,uses:["paneer","capsicum","wheat flour"],     protein:18,carb:35,fat:18,kcal:370,micros:["Calcium","B12"],       isKeto:false,isGF:false,isDiabetic:false,isVegan:false,note:"Quick paneer turnaround"},
     {name:"Quinoa Veg Bowl",       time:25,energy:2,uses:["quinoa","carrot","spinach"],           protein:12,carb:40,fat:8, kcal:300,micros:["Magnesium","Folate"],   isKeto:false,isGF:true, isDiabetic:false,isVegan:true, note:"Complete plant protein, loaded bowl"},
+    {name:"Egg Curry + Rice",       time:25,energy:2,uses:["eggs","rice","onion"],            protein:20,carb:48,fat:14,kcal:360,micros:["B12","Zinc"],            isKeto:false,isGF:true, isDiabetic:false,isVegan:false,note:"Quick egg curry, great with leftover rice"},
+    {name:"Masala Omelette + Toast",  time:15,energy:2,uses:["eggs","onion","capsicum"],         protein:22,carb:20,fat:14,kcal:290,micros:["B12","Selenium"],         isKeto:false,isGF:false,isDiabetic:true, isVegan:false,note:"Classic high-protein lunch in 15 minutes"},
     {name:"Grilled Chicken Salad", time:30,energy:2,uses:["chicken breast","capsicum"],           protein:35,carb:8, fat:14,kcal:320,micros:["Niacin","Phosphorus"],  isKeto:true, isGF:true, isDiabetic:true, isVegan:false,note:"Lean, high-protein, low cleanup"},
     {name:"Rajma + Jeera Rice",    time:45,energy:3,uses:["rajma","rice"],                        protein:16,carb:60,fat:8, kcal:380,micros:["Folate","Potassium"],   isKeto:false,isGF:true, isDiabetic:false,isVegan:true, note:"Worth it when you have the energy"},
     {name:"Tofu Stir-Fry Bowl",    time:25,energy:2,uses:["tofu","capsicum","carrot"],            protein:18,carb:14,fat:12,kcal:250,micros:["Calcium","Iron"],        isKeto:true, isGF:true, isDiabetic:true, isVegan:true, note:"Fast, plant protein, one pan"},
@@ -237,9 +273,9 @@ function SwipeScreen({ children, onSwipeLeft, onSwipeRight }) {
 function GlowBlob({color,opacity,blur,x,y,size}){
   return <div style={{position:"absolute",top:y,left:x,width:size,height:size,borderRadius:"50%",background:color,opacity,filter:`blur(${blur}px)`,pointerEvents:"none"}}/>;
 }
-function PrimaryBtn({label,onClick,disabled,icon}){
+function PrimaryBtn({label,onClick,disabled,icon,btnRef}){
   return (
-    <button onClick={onClick} disabled={disabled} style={{
+    <button ref={btnRef} onClick={onClick} disabled={disabled} style={{
       display:"flex",alignItems:"center",justifyContent:"center",gap:8,
       width:"100%",padding:"15px 20px",borderRadius:16,border:"none",
       background:disabled?"#D4C4B4":`linear-gradient(135deg,${C.saffron},${C.red})`,
@@ -254,7 +290,7 @@ function OptionRow({emoji,label,sub,selected,onSelect}){
   return (
     <button onClick={onSelect} style={{
       display:"flex",alignItems:"center",gap:12,width:"100%",
-      borderRadius:16,padding:"14px 16px",textAlign:"left",border:"none",cursor:"pointer",
+      borderRadius:16,padding:"14px 16px",textAlign:"left",cursor:"pointer",
       border:`1.5px solid ${selected?C.saffron:C.border}`,
       background:selected?C.selBg:C.card,
     }}>
@@ -279,35 +315,60 @@ function SplashScreen({onDone}){
   const [p,setP]=useState(0);
   useEffect(()=>{
     const t0=Date.now(),tot=5000;
-    const tick=()=>{const v=Math.min((Date.now()-t0)/tot,1);setP(v);if(v<1)requestAnimationFrame(tick);else setTimeout(onDone,200);};
+    const tick=()=>{const v=Math.min((Date.now()-t0)/tot,1);setP(v);if(v<1)requestAnimationFrame(tick);else setTimeout(onDone,250);};
     requestAnimationFrame(tick);
   },[]);
+  const BOXES=[{e:"🧠",l:"Thinks\nfor you"},{e:"🥕",l:"Uses what's\nalready home"},{e:"⚡",l:"Matches\nyour energy"}];
   return (
     <div style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",
       justifyContent:"center",background:`radial-gradient(ellipse at 30% 40%,#3A3090,${C.dark1} 60%)`,
-      padding:"0 32px",textAlign:"center",isolation:"isolate",position:"relative"}}>
-      <GlowBlob color={C.indigo}  opacity={0.18} blur={60} x="18%" y="16%" size={220}/>
-      <GlowBlob color={C.saffron} opacity={0.20} blur={50} x="58%" y="26%" size={180}/>
-      <GlowBlob color={C.red}     opacity={0.16} blur={55} x="30%" y="56%" size={160}/>
-      <div style={{position:"relative",zIndex:1,display:"flex",flexDirection:"column",alignItems:"center"}}>
-        <MealioLogo size={130} showText textSize={46}/>
-        <div style={{marginTop:44,display:"flex",gap:12}}>
-          {[{e:"🧠",l:"Thinks for you"},{e:"🥕",l:"Uses what's home"},{e:"⚡",l:"Matches your energy"}].map(i=>(
-            <div key={i.l} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:6,
-              background:"rgba(255,255,255,0.08)",borderRadius:14,padding:"12px 10px",
-              border:"0.5px solid rgba(255,255,255,0.12)"}}>
-              <span style={{fontSize:22}}>{i.e}</span>
-              <span style={{fontSize:10,color:"rgba(255,255,255,0.7)",
-                fontFamily:"'Nunito',sans-serif",fontWeight:600}}>{i.l}</span>
+      padding:"0 28px",textAlign:"center",isolation:"isolate",position:"relative",overflow:"hidden"}}>
+
+      {/* Animated glow blobs — pulse breathing effect */}
+      {[{c:C.indigo,x:"18%",y:"12%",s:240},{c:C.saffron,x:"54%",y:"24%",s:200},{c:C.red,x:"28%",y:"54%",s:180}].map((g,i)=>(
+        <div key={i} style={{position:"absolute",top:g.y,left:g.x,width:g.s,height:g.s,
+          borderRadius:"50%",background:g.c,opacity:0.18,filter:"blur(64px)",pointerEvents:"none",
+          animation:`glowPulse ${2.8+i*0.7}s ease-in-out ${i*0.4}s infinite`}}/>
+      ))}
+
+      <div style={{position:"relative",zIndex:1,display:"flex",flexDirection:"column",alignItems:"center",width:"100%"}}>
+
+        {/* Logo — scale bounce reveal like Myntra/Zepto */}
+        <div style={{animation:"logoReveal 0.75s cubic-bezier(0.34,1.56,0.64,1) 0.1s both"}}>
+          <MealioLogo size={130} showText textSize={46}/>
+        </div>
+
+        {/* Three info boxes — equal size, staggered slide-up */}
+        <div style={{marginTop:40,display:"flex",gap:10,width:"100%",maxWidth:340}}>
+          {BOXES.map((item,i)=>(
+            <div key={i} style={{
+              flex:"1 1 0",minWidth:0,
+              display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",
+              gap:8,background:"rgba(255,255,255,0.09)",borderRadius:16,padding:"16px 8px",
+              border:"0.5px solid rgba(255,255,255,0.14)",
+              animation:`fadeSlideUp 0.5s ease ${0.55+i*0.14}s both`,
+              textAlign:"center",minHeight:88
+            }}>
+              <span style={{fontSize:24,lineHeight:1}}>{item.e}</span>
+              <span style={{fontSize:10,color:"rgba(255,255,255,0.72)",
+                fontFamily:"'Nunito',sans-serif",fontWeight:700,
+                lineHeight:1.45,whiteSpace:"pre-line",letterSpacing:"0.01em"}}>{item.l}</span>
             </div>
           ))}
         </div>
-        <div style={{marginTop:52,width:160,height:4,borderRadius:2,background:"rgba(255,255,255,0.14)",overflow:"hidden"}}>
+
+        {/* Progress bar — shimmer animation like BookMyShow */}
+        <div style={{marginTop:48,width:160,height:4,borderRadius:2,
+          background:"rgba(255,255,255,0.12)",overflow:"hidden"}}>
           <div style={{height:"100%",borderRadius:2,
-            background:`linear-gradient(90deg,${C.indigo},${C.saffron})`,
-            width:`${p*100}%`,transition:"width 0.1s linear"}}/>
+            background:`linear-gradient(90deg,${C.indigo},${C.saffron},${C.red})`,
+            backgroundSize:"200% auto",
+            width:`${p*100}%`,transition:"width 0.12s linear",
+            animation:"shimmerBar 1.8s linear infinite"}}/>
         </div>
-        <p style={{marginTop:12,fontSize:11,color:"rgba(255,255,255,0.35)",fontFamily:"'Nunito',sans-serif"}}>Loading your kitchen brain…</p>
+        <p style={{marginTop:10,fontSize:11,color:"rgba(255,255,255,0.32)",
+          fontFamily:"'Nunito',sans-serif",animation:"fadeSlideUp 0.5s ease 0.9s both"}}>
+          Loading your kitchen brain…</p>
       </div>
     </div>
   );
@@ -466,12 +527,14 @@ function LoginScreen({onLogin}){
 function OTPScreen({phone,onVerify,onBack}){
   const [digits,setDigits]=useState(["","","","","",""]);
   const inputRefs=useRef([]);
+  const verifyRef=useRef(null);
   const code=digits.join("");
   const fmt=`+91 ${phone.slice(0,5)} XXXXX`;
   const handleDigit=(i,val)=>{
     if(!/^\d?$/.test(val))return;
     const n=[...digits];n[i]=val;setDigits(n);
     if(val&&i<5) inputRefs.current[i+1]?.focus();
+    else if(val&&i===5) setTimeout(()=>verifyRef.current?.focus(),80);
     if(!val&&i>0)inputRefs.current[i-1]?.focus();
   };
   const handleKey=(i,e)=>{
@@ -524,6 +587,7 @@ function OTPScreen({phone,onVerify,onBack}){
             Demo — any 6 digits will work!</p>
           <div style={{marginTop:28}}>
             <PrimaryBtn label="Verify & Continue" disabled={code.length<6}
+              btnRef={verifyRef}
               onClick={()=>code.length===6&&onVerify()}/>
           </div>
           <button style={{display:"block",width:"100%",marginTop:14,background:"none",
@@ -540,6 +604,501 @@ function OTPScreen({phone,onVerify,onBack}){
 }
 
 // ─── APP HEADER (sticky) ─────────────────────────────────────────────────────
+
+// ─── WEEKLY PLANNER ──────────────────────────────────────────────────────────
+
+function getWeekDays(weekOffset) {
+  const today = new Date();
+  const dow = today.getDay(); // 0=Sun
+  const monday = new Date(today);
+  monday.setDate(today.getDate() - (dow===0?6:dow-1) + weekOffset*7);
+  monday.setHours(0,0,0,0);
+  return Array.from({length:7},(_,i)=>{
+    const d = new Date(monday); d.setDate(monday.getDate()+i);
+    return d.toISOString().split('T')[0];
+  });
+}
+function dayMeta(dateStr){
+  const d = new Date(dateStr+'T00:00:00');
+  return {
+    day:['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()],
+    date:d.getDate(),
+    month:['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()],
+  };
+}
+function isToday(dateStr){ return dateStr===new Date().toISOString().split('T')[0]; }
+
+const LEFTOVER_CHAINS = {
+  "Rajma + Jeera Rice":      {next:"Dal Paratha",         slot:"breakfast",note:"Use last night's rajma as stuffing!"},
+  "Slow-Cooked Rajma":       {next:"Dal Paratha",         slot:"breakfast",note:"Thick rajma = perfect paratha filling"},
+  "Spinach Dal + Rice":      {next:"Dal Paratha",         slot:"breakfast",note:"Turn dal into crispy parathas"},
+  "Vegetable Khichdi":       {next:"Khichdi Patties",     slot:"breakfast",note:"Shape & pan-fry — crispy outside"},
+  "Palak Paneer + Roti":     {next:"Paneer Stuffed Paratha",slot:"breakfast",note:"Leftover palak paneer = best stuffing"},
+  "Egg Curry + Rice":        {next:"Egg Bhurji + Toast",  slot:"breakfast",note:"Quick twist on last night's eggs"},
+  "Tandoori Chicken + Veg":  {next:"Chicken Kathi Roll",  slot:"lunch",    note:"Wrap leftover chicken — done in 10 min"},
+  "Grilled Chicken Salad":   {next:"Chicken Kathi Roll",  slot:"lunch",    note:"Repurpose chicken beautifully"},
+};
+
+function getSlotSuggestions(slot, dayKey, weekPlan, vegPref, diet, count=3){
+  const usedNames = new Set(Object.values(weekPlan).map(m=>m.name));
+  const suggestions = [];
+
+  // Leftover chain check: look at previous day's dinner
+  const prev = new Date(dayKey+'T00:00:00');
+  prev.setDate(prev.getDate()-1);
+  const prevDinner = weekPlan[prev.toISOString().split('T')[0]+'_dinner'];
+  if(prevDinner && LEFTOVER_CHAINS[prevDinner.name]){
+    const chain = LEFTOVER_CHAINS[prevDinner.name];
+    if(chain.slot===slot){
+      suggestions.push({name:chain.next,reason:chain.note,isChain:true,time:15});
+    }
+  }
+
+  // Balance: if lunch for same day has heavy carbs suggest protein for dinner
+  const sameDayLunch = slot==='dinner'?weekPlan[dayKey+'_lunch']:null;
+  let boostProtein = sameDayLunch && DISHES.lunch.find(d=>d.name===sameDayLunch.name&&d.carb>40);
+
+  let pool = DISHES[slot].filter(vegFilter(vegPref)).filter(dietFilter(diet));
+  const fresh = pool.filter(d=>!usedNames.has(d.name));
+  const fill = fresh.length>=count?fresh:[...fresh,...pool.filter(d=>usedNames.has(d.name))];
+
+  const scored = fill.map(d=>({
+    ...d,
+    score: scoreDish(d,[],[],30,2,diet,false,[])
+      + (boostProtein&&d.protein>=16?12:0)
+      + Math.random()*3,
+  })).sort((a,b)=>b.score-a.score);
+
+  scored.forEach(d=>{
+    if(suggestions.length<count&&!suggestions.find(s=>s.name===d.name)){
+      suggestions.push({name:d.name,reason:d.note,isChain:false,time:d.time});
+    }
+  });
+  return suggestions.slice(0,count);
+}
+
+function fillEntireWeek(weekDays, weekPlan, vegPref, diet){
+  const result={...weekPlan};
+  const usedNames=new Set(Object.values(result).map(m=>m.name));
+
+  weekDays.forEach((day,dayIdx)=>{
+    ['breakfast','lunch','dinner'].forEach(slot=>{
+      const key=`${day}_${slot}`;
+      if(result[key]) return;
+
+      // Leftover chain
+      if(dayIdx>0){
+        const prevDay=weekDays[dayIdx-1];
+        const prevDinner=result[prevDay+'_dinner'];
+        if(prevDinner&&LEFTOVER_CHAINS[prevDinner.name]?.slot===slot){
+          const chain=LEFTOVER_CHAINS[prevDinner.name];
+          result[key]={name:chain.next,source:'ai',isChain:true};
+          usedNames.add(chain.next);
+          return;
+        }
+      }
+
+      let pool=DISHES[slot].filter(vegFilter(vegPref)).filter(dietFilter(diet));
+      let fresh=pool.filter(d=>!usedNames.has(d.name));
+      if(!fresh.length) fresh=pool;
+
+      const picked=fresh
+        .map(d=>({...d,score:scoreDish(d,[],[],30,2,diet,false,[])+Math.random()*4}))
+        .sort((a,b)=>b.score-a.score)[0];
+
+      if(picked){
+        result[key]={name:picked.name,source:'ai'};
+        usedNames.add(picked.name);
+      }
+    });
+  });
+  return result;
+}
+
+// ─── ADD MEAL PANEL (bottom sheet) ───────────────────────────────────────────
+function AddMealPanel({slot,dayKey,weekPlan,vegPref,diet,onAdd,onClose}){
+  const [query,setQuery]=useState('');
+  const SLOTLBL={breakfast:'Breakfast',lunch:'Lunch',dinner:'Dinner'};
+  const SLOTEMO={breakfast:'🌅',lunch:'☀️',dinner:'🌙'};
+
+  const suggestions=useMemo(
+    ()=>getSlotSuggestions(slot,dayKey,weekPlan,vegPref,diet),
+    [slot,dayKey]
+  );
+
+  const allNames=useMemo(()=>
+    DISHES[slot].filter(vegFilter(vegPref)).map(d=>d.name)
+  ,[slot,vegPref]);
+
+  const filtered=query.length>=2
+    ?allNames.filter(n=>n.toLowerCase().includes(query.toLowerCase()))
+    :[];
+
+  return (
+    <div style={{position:'fixed',bottom:0,left:0,right:0,maxWidth:430,margin:'0 auto',
+      background:'white',borderRadius:'24px 24px 0 0',
+      boxShadow:'0 -8px 40px rgba(0,0,0,0.18)',zIndex:300,
+      maxHeight:'82vh',overflowY:'auto',
+      animation:'panelUp 0.28s cubic-bezier(0.32,0.72,0,1) both'}}>
+      <style>{`@keyframes panelUp{from{transform:translateY(100%)}to{transform:translateY(0)}}`}</style>
+
+      {/* Drag handle */}
+      <div style={{display:'flex',justifyContent:'center',padding:'14px 0 6px'}}>
+        <div style={{width:36,height:4,borderRadius:2,background:C.border}}/>
+      </div>
+
+      <div style={{padding:'0 20px 40px'}}>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16}}>
+          <p style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:17,fontWeight:800,
+            color:C.ink,margin:0}}>{SLOTEMO[slot]} {SLOTLBL[slot]}</p>
+          <button onClick={onClose} style={{background:C.subtle,border:'none',borderRadius:10,
+            width:30,height:30,cursor:'pointer',fontSize:18,color:C.muted,lineHeight:'30px',
+            display:'flex',alignItems:'center',justifyContent:'center'}}>×</button>
+        </div>
+
+        {/* Search */}
+        <div style={{display:'flex',alignItems:'center',gap:8,borderRadius:14,
+          border:`1.5px solid ${query.length?C.saffron:C.border}`,
+          background:C.subtle,padding:'11px 14px',marginBottom:16,transition:'border 0.2s'}}>
+          <span style={{fontSize:15}}>🔍</span>
+          <input value={query} onChange={e=>setQuery(e.target.value)}
+            placeholder="Search any dish or type your own…"
+            autoFocus
+            style={{flex:1,border:'none',background:'transparent',outline:'none',
+              fontSize:14,color:C.ink,fontFamily:"'Nunito',sans-serif"}}/>
+          {query&&<button onClick={()=>setQuery('')}
+            style={{background:'none',border:'none',cursor:'pointer',color:C.muted,fontSize:16}}>×</button>}
+        </div>
+
+        {/* Search results */}
+        {filtered.length>0&&(
+          <div style={{marginBottom:16,borderRadius:14,overflow:'hidden',
+            border:`1px solid ${C.border}`}}>
+            {filtered.slice(0,7).map((name,i)=>(
+              <button key={name} onClick={()=>onAdd({name,source:'manual'})}
+                style={{display:'flex',alignItems:'center',justifyContent:'space-between',
+                  width:'100%',padding:'12px 14px',background:'white',border:'none',
+                  borderBottom:i<Math.min(filtered.length,7)-1?`1px solid ${C.border}`:'none',
+                  cursor:'pointer',textAlign:'left'}}>
+                <span style={{fontSize:13,color:C.ink,fontWeight:600,
+                  fontFamily:"'Nunito',sans-serif"}}>{name}</span>
+                <span style={{fontSize:12,color:C.saffron,fontWeight:700}}>+ Add</span>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Custom entry if no match */}
+        {query.length>=2&&!filtered.length&&(
+          <button onClick={()=>onAdd({name:query.trim(),source:'custom'})}
+            style={{width:'100%',padding:'13px',borderRadius:14,border:'none',cursor:'pointer',
+              background:`linear-gradient(135deg,${C.saffron},${C.red})`,
+              color:'white',fontSize:14,fontWeight:700,marginBottom:16,
+              fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+            Add "{query.trim()}" as custom dish
+          </button>
+        )}
+
+        {/* AI smart picks */}
+        {!query&&(
+          <>
+            <p style={{fontSize:11,fontWeight:700,textTransform:'uppercase',
+              letterSpacing:'0.07em',color:C.muted,marginBottom:10,
+              fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+              ✨ Smart picks for this slot</p>
+            <div style={{display:'flex',flexDirection:'column',gap:8}}>
+              {suggestions.map((s,i)=>(
+                <button key={i} onClick={()=>onAdd({name:s.name,source:'ai',isChain:s.isChain})}
+                  style={{display:'flex',alignItems:'center',gap:12,padding:'13px 14px',
+                    borderRadius:16,border:'none',cursor:'pointer',textAlign:'left',
+                    background:s.isChain?'#F0FAF3':C.subtle,
+                    border:`1px solid ${s.isChain?'#B6DFC2':C.border}`,
+                    transition:'opacity 0.15s'}}>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{display:'flex',alignItems:'center',gap:5,marginBottom:2}}>
+                      {s.isChain&&<span style={{fontSize:13}}>♻️</span>}
+                      <p style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:14,
+                        fontWeight:700,color:C.ink,margin:0}}>{s.name}</p>
+                    </div>
+                    <p style={{fontSize:11,color:s.isChain?'#4A7A5C':C.muted,margin:0,
+                      fontStyle:'italic',fontFamily:"'Nunito',sans-serif"}}>{s.reason}</p>
+                  </div>
+                  <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',
+                    gap:2,flexShrink:0}}>
+                    <span style={{fontSize:10,color:C.muted}}>⏱ {s.time}m</span>
+                    <span style={{fontSize:12,color:C.saffron,fontWeight:700}}>Add →</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── WEEKLY PLANNER SCREEN ────────────────────────────────────────────────────
+const SLOT_CFG=[
+  {key:'breakfast',emoji:'🌅',short:'B',color:'#F07820'},
+  {key:'lunch',    emoji:'☀️',short:'L',color:'#C98A1E'},
+  {key:'dinner',   emoji:'🌙',short:'D',color:'#5878F0'},
+];
+
+function WeekPlannerScreen({weekPlan,setWeekPlan,vegPref,diet}){
+  const [weekOffset,setWeekOffset]=useState(0);
+  const [addingTo,setAddingTo]=useState(null);
+  const [movingFrom,setMovingFrom]=useState(null);
+  const [showGrocery,setShowGrocery]=useState(false);
+
+  const weekDays=useMemo(()=>getWeekDays(weekOffset),[weekOffset]);
+
+  const weekLabel=()=>{
+    const f=dayMeta(weekDays[0]), l=dayMeta(weekDays[6]);
+    return `${f.date} ${f.month} – ${l.date} ${l.month}`;
+  };
+
+  const filledCount=weekDays.reduce((n,d)=>
+    n+SLOT_CFG.filter(s=>weekPlan[`${d}_${s.key}`]).length,0);
+
+  const groceryItems=useMemo(()=>{
+    const all=[...DISHES.breakfast,...DISHES.lunch,...DISHES.dinner];
+    const needed=new Set();
+    Object.values(weekPlan).forEach(meal=>{
+      const dish=all.find(d=>d.name===meal.name);
+      if(dish) dish.uses.forEach(i=>needed.add(i));
+    });
+    return Array.from(needed);
+  },[weekPlan]);
+
+  const handleSlotTap=(dayKey,slot)=>{
+    const key=`${dayKey}_${slot}`;
+    if(movingFrom){
+      const fromKey=`${movingFrom.dayKey}_${movingFrom.slot}`;
+      if(key!==fromKey){
+        setWeekPlan(wp=>{
+          const n={...wp}; n[key]=movingFrom.dish; delete n[fromKey]; return n;
+        });
+      }
+      setMovingFrom(null);
+    } else if(weekPlan[key]){
+      setMovingFrom({dayKey,slot,dish:weekPlan[key]});
+    } else {
+      setAddingTo({dayKey,slot});
+    }
+  };
+
+  const handleAdd=(dayKey,slot,meal)=>{
+    setWeekPlan(wp=>({...wp,[`${dayKey}_${slot}`]:meal}));
+    setAddingTo(null);
+  };
+
+  const handleRemove=(dayKey,slot)=>{
+    setWeekPlan(wp=>{const n={...wp};delete n[`${dayKey}_${slot}`];return n;});
+    setMovingFrom(null);
+  };
+
+  return (
+    <div style={{minHeight:'100vh',background:C.bg,paddingBottom:80}}>
+
+      {/* Header */}
+      <div style={{padding:'14px 20px 12px',background:'white',
+        borderBottom:`1px solid ${C.border}`,position:'sticky',top:0,zIndex:10}}>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
+          <button onClick={()=>{setWeekOffset(o=>o-1);setMovingFrom(null);}}
+            style={{width:36,height:36,borderRadius:12,background:C.subtle,
+              border:`1px solid ${C.border}`,cursor:'pointer',fontSize:18,
+              display:'flex',alignItems:'center',justifyContent:'center'}}>‹</button>
+          <div style={{textAlign:'center'}}>
+            <p style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:14,fontWeight:800,
+              color:C.ink,margin:0}}>{weekLabel()}</p>
+            <p style={{fontSize:11,color:C.muted,margin:0,fontFamily:"'Nunito',sans-serif"}}>
+              {filledCount} / {weekDays.length*3} meals planned</p>
+          </div>
+          <button onClick={()=>{setWeekOffset(o=>o+1);setMovingFrom(null);}}
+            style={{width:36,height:36,borderRadius:12,background:C.subtle,
+              border:`1px solid ${C.border}`,cursor:'pointer',fontSize:18,
+              display:'flex',alignItems:'center',justifyContent:'center'}}>›</button>
+        </div>
+        <div style={{display:'flex',gap:8}}>
+          <button onClick={()=>setWeekPlan(fillEntireWeek(weekDays,weekPlan,vegPref,diet))}
+            style={{flex:1,padding:'9px 0',borderRadius:12,border:'none',cursor:'pointer',
+              background:`linear-gradient(135deg,${C.saffron},${C.red})`,
+              color:'white',fontSize:13,fontWeight:700,
+              fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+            ✨ Fill my week intelligently
+          </button>
+          <button onClick={()=>setShowGrocery(v=>!v)}
+            style={{padding:'9px 14px',borderRadius:12,cursor:'pointer',fontSize:13,fontWeight:700,
+              fontFamily:"'Plus Jakarta Sans',sans-serif",
+              border:`1px solid ${showGrocery?C.dark1:C.border}`,
+              background:showGrocery?C.dark1:'white',
+              color:showGrocery?'white':C.muted}}>
+            🛒 {groceryItems.length}
+          </button>
+        </div>
+      </div>
+
+      {/* Grocery panel */}
+      {showGrocery&&(
+        <div style={{margin:'12px 20px',borderRadius:16,background:'white',
+          border:`1px solid ${C.border}`,padding:16,
+          animation:'fadeSlideUp 0.2s ease both'}}>
+          <p style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:14,fontWeight:800,
+            color:C.ink,margin:'0 0 10px'}}>🛒 This week's shopping list</p>
+          {groceryItems.length===0
+            ?<p style={{fontSize:13,color:C.muted,margin:0,fontStyle:'italic',
+                fontFamily:"'Nunito',sans-serif"}}>Add meals first to auto-generate your list</p>
+            :<div style={{display:'flex',flexWrap:'wrap',gap:6}}>
+              {groceryItems.map(item=>(
+                <span key={item} style={{fontSize:12,padding:'5px 12px',borderRadius:20,
+                  background:C.subtle,border:`1px solid ${C.border}`,color:C.ink,
+                  display:'flex',alignItems:'center',gap:4,fontFamily:"'Nunito',sans-serif"}}>
+                  {ING_EMOJI[item]&&<span style={{fontSize:13}}>{ING_EMOJI[item]}</span>}
+                  {item}
+                </span>
+              ))}
+            </div>
+          }
+        </div>
+      )}
+
+      {/* Moving banner */}
+      {movingFrom&&(
+        <div style={{margin:'8px 20px',padding:'11px 14px',borderRadius:12,
+          background:'#FFF0DE',border:`1.5px solid ${C.saffron}`,
+          display:'flex',alignItems:'center',justifyContent:'space-between',
+          animation:'fadeSlideUp 0.15s ease both'}}>
+          <p style={{fontSize:12,fontWeight:700,color:C.selTxt,margin:0,
+            fontFamily:"'Plus Jakarta Sans',sans-serif",flex:1,minWidth:0}}>
+            Moving: {movingFrom.dish.name} — tap any empty slot
+          </p>
+          <div style={{display:'flex',gap:10,flexShrink:0}}>
+            <button onClick={()=>handleRemove(movingFrom.dayKey,movingFrom.slot)}
+              style={{fontSize:12,color:C.red,background:'none',border:'none',
+                cursor:'pointer',fontWeight:700}}>Delete</button>
+            <button onClick={()=>setMovingFrom(null)}
+              style={{fontSize:12,color:C.muted,background:'none',border:'none',cursor:'pointer'}}>
+              Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {/* Week grid — horizontal scroll */}
+      <div style={{overflowX:'auto',padding:'12px 16px 4px',
+        WebkitOverflowScrolling:'touch',scrollbarWidth:'none'}}>
+        <div style={{display:'flex',gap:7,minWidth:'max-content'}}>
+          {weekDays.map(dayKey=>{
+            const dm=dayMeta(dayKey);
+            const today=isToday(dayKey);
+            return (
+              <div key={dayKey} style={{width:96,flexShrink:0}}>
+                {/* Day header */}
+                <div style={{textAlign:'center',marginBottom:7,padding:'7px 4px',borderRadius:12,
+                  background:today?C.dark1:today?'':C.card,
+                  border:today?'none':`1px solid ${C.border}`}}>
+                  <p style={{fontSize:10,fontWeight:700,color:today?'rgba(255,255,255,0.7)':C.muted,
+                    margin:0,textTransform:'uppercase',letterSpacing:'0.06em',
+                    fontFamily:"'Plus Jakarta Sans',sans-serif"}}>{dm.day}</p>
+                  <p style={{fontSize:22,fontWeight:800,color:today?'white':C.ink,
+                    margin:0,lineHeight:1.2,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>{dm.date}</p>
+                  {today&&<span style={{fontSize:9,color:C.saffron,fontWeight:700,
+                    background:'rgba(240,120,32,0.15)',borderRadius:8,padding:'1px 6px',
+                    fontFamily:"'Nunito',sans-serif"}}>TODAY</span>}
+                </div>
+
+                {/* Meal slots */}
+                {SLOT_CFG.map(sc=>{
+                  const key=`${dayKey}_${sc.key}`;
+                  const meal=weekPlan[key];
+                  const isMovingSrc=movingFrom?.dayKey===dayKey&&movingFrom?.slot===sc.key;
+                  const isDropTarget=movingFrom&&!meal;
+                  return (
+                    <button key={sc.key} onClick={()=>handleSlotTap(dayKey,sc.key)}
+                      style={{display:'block',width:'100%',marginBottom:5,padding:'8px 7px',
+                        borderRadius:12,cursor:'pointer',textAlign:'left',
+                        background:isMovingSrc?C.selBg:isDropTarget?'#FFFBF0':meal?'white':C.subtle,
+                        border:isMovingSrc?`2px solid ${C.saffron}`:
+                               isDropTarget?`2px dashed ${C.saffron}`:
+                               meal?`1px solid ${C.border}`:`1.5px dashed ${C.border}`,
+                        minHeight:64,boxShadow:isMovingSrc?'0 4px 14px rgba(240,120,32,0.22)':undefined,
+                        transition:'all 0.15s'}}>
+                      <div style={{display:'flex',alignItems:'center',gap:3,marginBottom:3}}>
+                        <span style={{fontSize:10}}>{sc.emoji}</span>
+                        <span style={{fontSize:9,fontWeight:700,color:sc.color,
+                          textTransform:'uppercase',letterSpacing:'0.04em'}}>{sc.short}</span>
+                        {meal?.source==='ai'&&<span style={{fontSize:8,color:C.muted,marginLeft:1}}>✨</span>}
+                        {meal?.isChain&&<span style={{fontSize:9}}>♻️</span>}
+                      </div>
+                      {meal
+                        ?<p style={{fontSize:11,fontWeight:700,color:C.ink,margin:0,
+                            lineHeight:1.3,fontFamily:"'Plus Jakarta Sans',sans-serif",
+                            overflow:'hidden',display:'-webkit-box',
+                            WebkitLineClamp:2,WebkitBoxOrient:'vertical'}}>{meal.name}</p>
+                        :<p style={{fontSize:13,color:C.border,margin:0,fontWeight:800,
+                            lineHeight:1,textAlign:'center'}}>+</p>
+                      }
+                    </button>
+                  );
+                })}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Legend */}
+      <div style={{padding:'6px 20px 4px',display:'flex',gap:14,flexWrap:'wrap'}}>
+        {[{e:'✨',l:'AI filled'},{e:'♻️',l:'Leftover reuse'},{e:'📲',l:'Tap to move/delete'}].map(x=>(
+          <span key={x.l} style={{fontSize:11,color:C.muted,display:'flex',alignItems:'center',gap:3,
+            fontFamily:"'Nunito',sans-serif"}}><span>{x.e}</span>{x.l}</span>
+        ))}
+      </div>
+
+      {/* Add meal panel */}
+      {addingTo&&(
+        <>
+          <div style={{position:'fixed',inset:0,background:'rgba(28,20,16,0.35)',zIndex:299}}
+            onClick={()=>setAddingTo(null)}/>
+          <AddMealPanel slot={addingTo.slot} dayKey={addingTo.dayKey}
+            weekPlan={weekPlan} vegPref={vegPref} diet={diet}
+            onAdd={meal=>handleAdd(addingTo.dayKey,addingTo.slot,meal)}
+            onClose={()=>setAddingTo(null)}/>
+        </>
+      )}
+    </div>
+  );
+}
+
+function BottomNav({screen,onNavigate}){
+  const items=[
+    {icon:"home",           label:"Today",    key:"checkin"},
+    {icon:"calendar_month", label:"Planner",  key:"planner"},
+    {icon:"recycling",      label:"Leftovers",key:"leftovers"},
+    {icon:"favorite",       label:"Saved",    key:"saved"},
+    {icon:"person",         label:"Profile",  key:"profile"},
+  ];
+  const active=screen;
+  return (
+    <div style={{position:"fixed",bottom:0,left:0,right:0,maxWidth:430,margin:"0 auto",
+      background:"white",borderTop:`1px solid ${C.border}`,display:"flex",zIndex:100,
+      paddingBottom:8}}>
+      {items.map(it=>{
+        const on=active===it.key;
+        return (
+          <button key={it.key}
+            onClick={()=>["checkin","pantry","leftovers"].includes(it.key)&&onNavigate(it.key)}
+            style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:3,
+              padding:"10px 0 4px",background:"none",border:"none",cursor:"pointer"}}>
+            <MS name={it.icon} size={22} fill={on?1:0} color={on?C.saffron:C.muted}/>
+            <span style={{fontSize:9.5,fontWeight:on?700:500,
+              color:on?C.saffron:C.muted,fontFamily:"'Nunito',sans-serif"}}>{it.label}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 function AppHeader({step,horizon,setHorizon,onLogoTap,accent,rightSlot}){
   const steps=[{n:1,l:"Preferences"},{n:2,l:"Pantry"},{n:3,l:"Leftovers"},{n:4,l:"Check-in"}];
   return (
@@ -553,7 +1112,22 @@ function AppHeader({step,horizon,setHorizon,onLogoTap,accent,rightSlot}){
           <p style={{fontFamily:"'Pacifico',cursive",fontSize:16,color:C.dark1,margin:0,lineHeight:1}}>Mealio</p>
           <p style={{fontSize:10,color:C.muted,margin:0}}>Art Of Meal Planning</p>
         </div>
-        {rightSlot}
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          {rightSlot}
+          <button title="Notifications" style={{width:34,height:34,borderRadius:11,
+            background:C.subtle,border:`1px solid ${C.border}`,
+            display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",position:"relative"}}>
+            <MS name="notifications" size={17} color={C.muted}/>
+            <span style={{position:"absolute",top:6,right:7,width:7,height:7,borderRadius:"50%",
+              background:C.red,border:"1.5px solid white"}}/>
+          </button>
+          <button title="Profile" style={{width:34,height:34,borderRadius:17,
+            background:`linear-gradient(135deg,${C.saffron},${C.red})`,
+            border:"none",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+            <span style={{fontSize:13,fontWeight:800,color:"white",
+              fontFamily:"'Plus Jakarta Sans',sans-serif"}}>T</span>
+          </button>
+        </div>
       </div>
       {step&&step<=4&&(
         <div style={{display:"flex",alignItems:"center",gap:0,height:3,marginBottom:12}}>
@@ -652,7 +1226,7 @@ function PantryScreen({vegPref,diet,staples,setStaples,pantry,setPantry,expiring
           return (
             <button key={item} onClick={()=>setStaples(s=>s.includes(item)?s.filter(i=>i!==item):[...s,item])}
               style={{display:"flex",alignItems:"center",gap:6,borderRadius:20,padding:"8px 14px",
-                fontSize:13,fontWeight:500,cursor:"pointer",border:"none",
+                fontSize:13,fontWeight:500,cursor:"pointer",
                 border:`1.5px solid ${sel?C.saffron:C.border}`,
                 background:sel?C.selBg:C.card,color:sel?C.selTxt:C.ink}}>
               {ING_EMOJI[item]&&<span style={{fontSize:16,lineHeight:1}}>{ING_EMOJI[item]}</span>}
@@ -672,7 +1246,7 @@ function PantryScreen({vegPref,diet,staples,setStaples,pantry,setPantry,expiring
           return (
             <button key={item} onClick={()=>toggleChip(item)}
               style={{display:"flex",alignItems:"center",gap:6,borderRadius:20,padding:"8px 14px",
-                fontSize:13,fontWeight:500,cursor:"pointer",border:"none",
+                fontSize:13,fontWeight:500,cursor:"pointer",
                 border:`1.5px solid ${exp?"#C98A1E":sel?C.saffron:C.border}`,
                 background:exp?"#FEF5E4":sel?C.selBg:C.card,
                 color:exp?"#8A6010":sel?C.selTxt:C.ink}}>
@@ -720,7 +1294,7 @@ function LeftoversScreen({leftovers,setLeftovers,onNext}){
           return (
             <button key={chip.key} onClick={()=>toggle(chip)}
               style={{display:"flex",alignItems:"center",gap:6,borderRadius:20,padding:"8px 14px",
-                fontSize:13,fontWeight:500,cursor:"pointer",border:"none",
+                fontSize:13,fontWeight:500,cursor:"pointer",
                 border:`1.5px solid ${added?C.saffron:C.border}`,
                 background:added?C.selBg:C.card,color:added?C.selTxt:C.ink}}>
               <span style={{fontSize:16,lineHeight:1}}>{chip.emoji}</span>
@@ -793,7 +1367,7 @@ function CheckinScreen({horizon,energy,setEnergy,time,setTime,mood,setMood,onSub
         {ENERGY_OPTIONS.map(o=>(
           <button key={o.key} onClick={()=>setEnergy(o.key)} style={{
             flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:8,
-            padding:"16px 8px",borderRadius:16,border:"none",cursor:"pointer",
+            padding:"16px 8px",borderRadius:16,cursor:"pointer",
             border:`1.5px solid ${energy===o.key?o.color:C.border}`,
             background:energy===o.key?`${o.color}18`:C.card,
             color:energy===o.key?o.color:C.muted,transition:"all 0.2s"}}>
@@ -809,7 +1383,7 @@ function CheckinScreen({horizon,energy,setEnergy,time,setTime,mood,setMood,onSub
         {MOOD_OPTIONS.map(m=>(
           <button key={m.key} onClick={()=>setMood(k=>k===m.key?null:m.key)}
             style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:6,
-              padding:"14px 8px",borderRadius:16,border:"none",cursor:"pointer",
+              padding:"14px 8px",borderRadius:16,cursor:"pointer",
               border:`1.5px solid ${mood===m.key?C.saffron:C.border}`,
               background:mood===m.key?C.selBg:C.card,transition:"all 0.2s"}}>
             <span style={{fontSize:24,lineHeight:1}}>{m.emoji}</span>
@@ -824,7 +1398,7 @@ function CheckinScreen({horizon,energy,setEnergy,time,setTime,mood,setMood,onSub
       <div style={{display:"flex",gap:8,marginBottom:32}}>
         {TIME_OPTIONS.map(o=>(
           <button key={o.key} onClick={()=>setTime(o.key)}
-            style={{flex:1,padding:"14px 8px",borderRadius:14,border:"none",cursor:"pointer",
+            style={{flex:1,padding:"14px 8px",borderRadius:14,cursor:"pointer",
               fontSize:13,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif",
               border:`1.5px solid ${time===o.key?C.saffron:C.border}`,
               background:time===o.key?C.selBg:C.card,
@@ -836,7 +1410,6 @@ function CheckinScreen({horizon,energy,setEnergy,time,setTime,mood,setMood,onSub
       <button onClick={onSubmit} style={{
         display:"flex",alignItems:"center",justifyContent:"center",gap:8,
         width:"100%",padding:"15px 20px",borderRadius:16,border:"none",cursor:"pointer",
-        background:`linear-gradient(135deg,${acc},${acc==="olive"?C.red:acc})`,
         background:`linear-gradient(135deg,${C.saffron},${C.red})`,
         color:"white",fontSize:14,fontWeight:800,
         fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
@@ -860,7 +1433,7 @@ function NutritionCard({dish,addOns}){
         <span style={{fontSize:14,fontWeight:800,color:C.ink,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>{t.kcal} kcal</span>
       </div>
       <div style={{display:"flex",gap:16,flexWrap:"wrap",marginBottom:8}}>
-        {[["💪",`${t.protein}g`,"Protein"],[" 🌾",`${t.carb}g`,"Carbs"],["🫙",`${t.fat}g`,"Fat"]].map(([ic,val,lbl])=>(
+        {[["💪",`${t.protein}g`,"Protein"],["🍚",`${t.carb}g`,"Carbs"],["🫒",`${t.fat}g`,"Fat"]].map(([ic,val,lbl])=>(
           <span key={lbl} style={{fontSize:12,color:C.ink,display:"flex",alignItems:"center",gap:4}}>
             <span style={{fontSize:14}}>{ic}</span>{val}<span style={{color:C.muted}}>{lbl}</span>
           </span>
@@ -886,32 +1459,73 @@ function NutritionCard({dish,addOns}){
   );
 }
 function MissingGroceries({items}){
-  if(!items.length)return(
-    <p style={{fontSize:12,color:"#4A5429",display:"flex",alignItems:"center",gap:6,marginTop:10}}>
+  const [open,setOpen]=useState(false);
+  if(!items.length) return (
+    <p style={{fontSize:12,color:"#4A7040",display:"flex",alignItems:"center",gap:6,marginTop:10,
+      fontWeight:600,fontFamily:"'Nunito',sans-serif"}}>
       <Check size={13}/>You have everything for this!</p>
   );
   return (
-    <div style={{borderRadius:14,padding:12,marginTop:12,background:"#FBF5EA",border:"1px solid #EDD9A0"}}>
-      <p style={{fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.06em",
-        color:"#8A7020",margin:"0 0 8px",display:"flex",alignItems:"center",gap:6}}>
-        <ShoppingBag size={13}/>Missing groceries?</p>
-      {items.map(item=>(
-        <div key={item} style={{display:"flex",alignItems:"center",justifyContent:"space-between",
-          paddingBottom:6,marginBottom:6,borderBottom:`1px solid #EDD9A0`}}>
-          <span style={{fontSize:13,color:C.ink,display:"flex",alignItems:"center",gap:6}}>
-            <span>{ING_EMOJI[item]||"🛒"}</span>{item}
-          </span>
-          <div style={{display:"flex",gap:6}}>
-            {DELIVERY_APPS.map(app=>(
-              <a key={app.key} href={app.url(item)} target="_blank" rel="noopener noreferrer"
-                style={{fontSize:10,fontWeight:700,padding:"3px 8px",borderRadius:10,textDecoration:"none",
-                  border:`1px solid ${app.color}55`,color:app.color,background:`${app.color}12`}}>
-                {app.label}
-              </a>
-            ))}
-          </div>
+    <div style={{marginTop:12}}>
+      {/* Missing ingredient tags — clean, no buttons */}
+      <div style={{display:"flex",alignItems:"flex-start",gap:6,flexWrap:"wrap",marginBottom:10}}>
+        <div style={{display:"flex",alignItems:"center",gap:4,marginRight:2,paddingTop:3}}>
+          <ShoppingBag size={12} color="#8A7020"/>
+          <span style={{fontSize:11,fontWeight:700,color:"#8A7020",textTransform:"uppercase",
+            letterSpacing:"0.06em",whiteSpace:"nowrap"}}>Need to buy:</span>
         </div>
-      ))}
+        {items.map(item=>(
+          <span key={item} style={{display:"inline-flex",alignItems:"center",gap:4,
+            fontSize:12,padding:"4px 10px",borderRadius:20,fontWeight:600,
+            background:"#FBF5EA",border:"1px solid #EDD9A0",color:"#5A4010"}}>
+            {ING_EMOJI[item]&&<span style={{fontSize:14,lineHeight:1}}>{ING_EMOJI[item]}</span>}
+            {item}
+          </span>
+        ))}
+      </div>
+
+      {/* Single "Order Online" CTA — no repetition */}
+      <button onClick={()=>setOpen(o=>!o)} style={{
+        display:"flex",alignItems:"center",justifyContent:"space-between",
+        width:"100%",padding:"11px 14px",borderRadius:14,cursor:"pointer",
+        border:"1.5px dashed #C98A1E",background:"#FFFBEF",
+        transition:"background 0.2s"}}>
+        <span style={{display:"flex",alignItems:"center",gap:8,fontSize:13,
+          fontWeight:700,color:"#8A6010",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+          🛒 Order {items.length} item{items.length>1?"s":""} online
+        </span>
+        <span style={{fontSize:12,color:"#C98A1E",transition:"transform 0.2s",
+          display:"inline-block",transform:open?"rotate(180deg)":"rotate(0deg)"}}>▼</span>
+      </button>
+
+      {/* Expandable delivery app list — clean rows, brand accent on left */}
+      {open&&(
+        <div style={{marginTop:6,borderRadius:14,overflow:"hidden",
+          border:"1px solid #EDD9A0",background:"white",
+          animation:"fadeSlideUp 0.2s ease both"}}>
+          <div style={{padding:"10px 14px 6px",fontSize:11,color:"#8A7020",
+            fontFamily:"'Nunito',sans-serif",borderBottom:"1px solid #F5EDDC"}}>
+            Choose where to order — tap to open app
+          </div>
+          {DELIVERY_APPS.map((app,i)=>(
+            <a key={app.key}
+              href={app.url(items.join(" "))} target="_blank" rel="noopener noreferrer"
+              style={{display:"flex",alignItems:"center",gap:12,padding:"13px 14px",
+                textDecoration:"none",
+                borderBottom:i<DELIVERY_APPS.length-1?"1px solid #F5EDDC":"none",
+                borderLeft:`4px solid ${app.color}`,background:"white",
+                transition:"background 0.15s"}}>
+              <div style={{width:8,height:8,borderRadius:"50%",
+                background:app.color,flexShrink:0}}/>
+              <span style={{flex:1,fontSize:14,fontWeight:700,
+                color:C.ink,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>{app.label}</span>
+              <span style={{fontSize:12,color:C.muted,fontFamily:"'Nunito',sans-serif"}}>
+                Search {items.length} item{items.length>1?"s":""}</span>
+              <span style={{fontSize:16,color:app.color,fontWeight:700}}>→</span>
+            </a>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -940,6 +1554,14 @@ function LeftoverTransforms({leftovers}){
         </div>
       </div>
     </div>
+  );
+}
+function YTIcon(){
+  return (
+    <svg width="20" height="14" viewBox="0 0 20 14" fill="none" aria-label="Watch on YouTube">
+      <rect width="20" height="14" rx="3.5" fill="#FF0000"/>
+      <path d="M8 3.5l6 3.5-6 3.5V3.5z" fill="white"/>
+    </svg>
   );
 }
 function MealCarousel({slot,ranked,index,onIndex,accent,addOns,available,favorites,onFav}){
@@ -993,9 +1615,9 @@ function MealCarousel({slot,ranked,index,onIndex,accent,addOns,available,favorit
             <Clock size={12}/>{dish.time} min</span>
           <span>Energy {dish.energy}/3</span>
           <a href={yt} target="_blank" rel="noopener noreferrer"
-            style={{display:"flex",alignItems:"center",gap:4,color:C.saffron,
-              textDecoration:"none",fontWeight:600}}>
-            <PlayCircle size={13}/>Watch recipe</a>
+            title="Watch recipe on YouTube"
+            style={{display:"flex",alignItems:"center",gap:4,textDecoration:"none"}}>
+            <YTIcon/></a>
         </div>
         <NutritionCard dish={dish} addOns={addOns}/>
         <MissingGroceries items={missing}/>
@@ -1016,6 +1638,35 @@ function LockedPill({emoji,icon,text,color}){
   );
 }
 
+function LeftoverTooltipPill({leftovers}){
+  const [show,setShow]=useState(false);
+  return (
+    <div style={{position:"relative",display:"inline-flex"}}
+      onMouseEnter={()=>setShow(true)} onMouseLeave={()=>setShow(false)}
+      onTouchStart={()=>setShow(v=>!v)}>
+      <LockedPill emoji="♻️" text={`${leftovers.length} leftover${leftovers.length>1?"s":""}`}/>
+      {show&&(
+        <div style={{position:"absolute",bottom:"110%",left:"50%",transform:"translateX(-50%)",
+          background:C.dark1,borderRadius:12,padding:"10px 14px",zIndex:200,
+          boxShadow:"0 6px 24px rgba(0,0,0,0.35)",minWidth:130,
+          animation:"fadeSlideUp 0.15s ease both"}}>
+          {leftovers.map(l=>(
+            <div key={l.key} style={{display:"flex",alignItems:"center",gap:6,
+              fontSize:13,color:"white",padding:"3px 0",fontFamily:"'Nunito',sans-serif",
+              fontWeight:600}}>
+              <span>{l.emoji}</span>{l.label}
+              <span style={{fontSize:11,color:"rgba(255,255,255,0.55)",marginLeft:2}}>
+                {["","A little","Some","A lot"][l.qty]}</span>
+            </div>
+          ))}
+          <div style={{position:"absolute",top:"100%",left:"50%",transform:"translateX(-50%)",
+            width:0,height:0,borderLeft:"7px solid transparent",
+            borderRight:"7px solid transparent",borderTop:`7px solid ${C.dark1}`}}/>
+        </div>
+      )}
+    </div>
+  );
+}
 function ResultsScreen({horizon,slot,slots,plan,vegPref,diet,energy,time,mood,leftovers,
   available,effectiveStaples,carouselIndex,setCarouselIndex,favorites,onFav,onNewDay}){
   const acc=eColor(energy);
@@ -1043,7 +1694,7 @@ function ResultsScreen({horizon,slot,slots,plan,vegPref,diet,energy,time,mood,le
           <LockedPill icon={eO.icon} text={eO.label} color={eO.color}/>
           {mO&&<LockedPill emoji={mO.emoji} text={mO.label}/>}
           <LockedPill icon="schedule" text={`${time} min`}/>
-          {leftovers.length>0&&<LockedPill emoji="♻️" text={`${leftovers.length} leftover${leftovers.length>1?"s":""}`}/>}
+          {leftovers.length>0&&<LeftoverTooltipPill leftovers={leftovers}/>}
         </div>
       </div>
       <div style={{padding:"0 20px"}}>
@@ -1064,11 +1715,12 @@ export default function Mealio(){
   const [screen,setScreen]=useState("splash");
   const [phone,setPhone]=useState("");
   // Setup (persists)
-  const [vegPref,setVegPref]=useState(null);
+  const [vegPref,setVegPref]=useState("veg");
   const [diet,setDiet]=useState("balanced");
   const [staples,setStaples]=useState(["curd","milk","rice","ghee"]);
   const [favorites,setFavorites]=useState([]);
   const [horizon,setHorizon]=useState("day");
+  const [weekPlan,setWeekPlan]=useState({});
   // Daily
   const [pantry,setPantry]=useState([]);
   const [expiring,setExpiring]=useState([]);
@@ -1115,6 +1767,12 @@ export default function Mealio(){
         .material-symbols-outlined{font-family:'Material Symbols Outlined';}
         input::placeholder{color:#8A6A5A;opacity:0.65;}
         button:active{opacity:0.8;transform:scale(0.97);}
+        @keyframes logoReveal{0%{opacity:0;transform:scale(0.55) translateY(24px);}65%{transform:scale(1.07) translateY(-5px);opacity:1;}85%{transform:scale(0.97) translateY(2px);}100%{opacity:1;transform:scale(1) translateY(0);}}
+        @keyframes fadeSlideUp{0%{opacity:0;transform:translateY(18px);}100%{opacity:1;transform:translateY(0);}}
+        @keyframes taglineIn{0%{opacity:0;letter-spacing:0.22em;}100%{opacity:0.72;letter-spacing:0.07em;}}
+        @keyframes glowPulse{0%,100%{opacity:0.16;transform:scale(1);}50%{opacity:0.26;transform:scale(1.12);}}
+        @keyframes shimmerBar{0%{background-position:-200% center;}100%{background-position:200% center;}}
+        @keyframes spin{to{transform:rotate(360deg)}}
       `}</style>
       <div style={{maxWidth:430,margin:"0 auto",minHeight:"100vh",position:"relative",overflow:"hidden"}}>
         {screen==="splash"     && <SplashScreen     onDone={()=>go("onboarding")}/>}
@@ -1139,7 +1797,8 @@ export default function Mealio(){
                 </button>
               ):null}
             />
-            <div style={{flex:1,overflowY:"auto"}}>
+            <div style={{flex:1,overflowY:"auto",paddingBottom:72}}>
+              {screen==="planner"  && <WeekPlannerScreen weekPlan={weekPlan} setWeekPlan={setWeekPlan} vegPref={vegPref} diet={diet}/>}
               {screen==="prefs"    && <PrefsScreen vegPref={vegPref} setVegPref={setVegPref}
                                         diet={diet} setDiet={setDiet} onNext={()=>go("pantry")}/>}
               {screen==="pantry"   && <PantryScreen vegPref={vegPref} diet={diet}
@@ -1179,6 +1838,11 @@ export default function Mealio(){
                   onNewDay={newDay}/>
               )}
             </div>
+          <BottomNav screen={screen} onNavigate={s=>{
+            if(s==="checkin"&&screen==="results") newDay();
+            else if(s==="planner") go("planner");
+            else if(["pantry","leftovers","checkin"].includes(s)) go(s);
+          }}/>
           </div>
         )}
       </div>
