@@ -525,7 +525,7 @@ function LoginScreen({onLogin}){
 
 // ─── OTP ─────────────────────────────────────────────────────────────────────
 function OTPScreen({phone,onVerify,onBack}){
-  const [digits,setDigits]=useState(["","","","","",""]);
+  const [digits,setDigits]=useState(["","","",""]);
   const inputRefs=useRef([]);
   const verifyRef=useRef(null);
   const code=digits.join("");
@@ -533,8 +533,8 @@ function OTPScreen({phone,onVerify,onBack}){
   const handleDigit=(i,val)=>{
     if(!/^\d?$/.test(val))return;
     const n=[...digits];n[i]=val;setDigits(n);
-    if(val&&i<5) inputRefs.current[i+1]?.focus();
-    else if(val&&i===5) setTimeout(()=>verifyRef.current?.focus(),80);
+    if(val&&i<3) inputRefs.current[i+1]?.focus();
+    else if(val&&i===3) setTimeout(()=>verifyRef.current?.focus(),80);
     if(!val&&i>0)inputRefs.current[i-1]?.focus();
   };
   const handleKey=(i,e)=>{
@@ -584,11 +584,11 @@ function OTPScreen({phone,onVerify,onBack}){
           </div>
           <p style={{fontSize:12,color:C.muted,marginTop:12,
             fontFamily:"'Nunito',sans-serif",textAlign:"center",fontStyle:"italic"}}>
-            Demo — any 6 digits will work!</p>
+            Demo — any 4 digits will work!</p>
           <div style={{marginTop:28}}>
-            <PrimaryBtn label="Verify & Continue" disabled={code.length<6}
+            <PrimaryBtn label="Verify & Continue" disabled={code.length<4}
               btnRef={verifyRef}
-              onClick={()=>code.length===6&&onVerify()}/>
+              onClick={()=>code.length===4&&onVerify()}/>
           </div>
           <button style={{display:"block",width:"100%",marginTop:14,background:"none",
             border:"none",fontSize:13,color:C.muted,
@@ -1070,6 +1070,159 @@ function WeekPlannerScreen({weekPlan,setWeekPlan,vegPref,diet}){
   );
 }
 
+
+function SavedScreen({favorites,plan}){
+  // Collect dish details from favorites list
+  const allDishes=[...DISHES.breakfast,...DISHES.lunch,...DISHES.dinner];
+  const savedDishes=allDishes.filter(d=>favorites.includes(d.name))
+    .filter((d,i,arr)=>arr.findIndex(x=>x.name===d.name)===i);
+  const SLOT_EMO={breakfast:"🌅",lunch:"☀️",dinner:"🌙"};
+  const getSlot=name=>{
+    if(DISHES.breakfast.find(d=>d.name===name)) return "breakfast";
+    if(DISHES.lunch.find(d=>d.name===name)) return "lunch";
+    return "dinner";
+  };
+  return (
+    <div style={{padding:"20px 20px 40px",minHeight:"60vh"}}>
+      <h2 style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:22,fontWeight:800,
+        color:C.ink,margin:"0 0 4px"}}>❤️ Saved Dishes</h2>
+      <p style={{fontSize:13,color:C.muted,margin:"0 0 20px",fontFamily:"'Nunito',sans-serif",
+        fontStyle:"italic"}}>Your all-time favourites, always ready to suggest</p>
+      {savedDishes.length===0?(
+        <div style={{marginTop:40,textAlign:"center",padding:"32px 24px",borderRadius:20,
+          background:"white",border:`1.5px dashed ${C.border}`}}>
+          <span style={{fontSize:52,display:"block",marginBottom:14}}>🍽️</span>
+          <p style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:17,fontWeight:800,
+            color:C.ink,margin:"0 0 8px"}}>Nothing saved yet!</p>
+          <p style={{fontSize:13,color:C.muted,margin:0,fontFamily:"'Nunito',sans-serif",
+            lineHeight:1.7}}>Tap the ❤️ on any dish card<br/>to save it here for quick access</p>
+        </div>
+      ):(
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+          {savedDishes.map(d=>{
+            const slot=getSlot(d.name);
+            const yt=`https://www.youtube.com/results?search_query=${encodeURIComponent(d.name+" recipe")}`;
+            return (
+              <div key={d.name} style={{background:"white",borderRadius:16,padding:"14px 16px",
+                border:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:12}}>
+                <span style={{fontSize:22,flexShrink:0}}>{SLOT_EMO[slot]}</span>
+                <div style={{flex:1,minWidth:0}}>
+                  <p style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:14,fontWeight:700,
+                    color:C.ink,margin:0}}>{d.name}</p>
+                  <p style={{fontSize:11,color:C.muted,margin:"2px 0 0",
+                    fontFamily:"'Nunito',sans-serif"}}>⏱ {d.time}m · {d.protein}g protein · {d.kcal} kcal</p>
+                </div>
+                <a href={yt} target="_blank" rel="noopener noreferrer"
+                  style={{display:"flex",alignItems:"center",flexShrink:0}}>
+                  <YTIcon/>
+                </a>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── PROFILE SCREEN ───────────────────────────────────────────────────────────
+function ProfileScreen({vegPref,diet,favorites}){
+  const vegOpt=VEG_OPTIONS.find(v=>v.key===vegPref);
+  const dietOpt=DIET_OPTIONS.find(d=>d.key===diet);
+  const MENU=[
+    {icon:"restaurant_menu",label:"My Meal Preferences",sub:"Veg, diet style, allergies"},
+    {icon:"family_restroom",label:"Family Profiles",sub:"Add members & their preferences"},
+    {icon:"calendar_month",label:"Meal History",sub:"What you've eaten this month"},
+    {icon:"notifications",label:"Reminders",sub:"Meal planning nudges"},
+    {icon:"share",label:"Share Mealio",sub:"Invite friends & family"},
+    {icon:"help_outline",label:"Help & Feedback",sub:"We'd love to hear from you"},
+  ];
+  return (
+    <div style={{paddingBottom:40}}>
+      {/* Profile hero */}
+      <div style={{background:`linear-gradient(135deg,${C.dark1},#3A2818)`,
+        padding:"40px 24px 28px",isolation:"isolate",position:"relative"}}>
+        <GlowBlob color={C.saffron} opacity={0.12} blur={50} x="60%" y="0%" size={160}/>
+        <div style={{display:"flex",alignItems:"center",gap:16,position:"relative",zIndex:1}}>
+          <div style={{width:64,height:64,borderRadius:32,
+            background:`linear-gradient(135deg,${C.saffron},${C.red})`,
+            display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+            <span style={{fontSize:28,fontWeight:800,color:"white",
+              fontFamily:"'Plus Jakarta Sans',sans-serif"}}>T</span>
+          </div>
+          <div>
+            <p style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:20,fontWeight:800,
+              color:"white",margin:0}}>Tinaa</p>
+            <p style={{fontSize:12,color:"rgba(255,255,255,0.6)",margin:"2px 0 0",
+              fontFamily:"'Nunito',sans-serif"}}>Home chef · Hyderabad</p>
+          </div>
+        </div>
+        {/* Quick stats */}
+        <div style={{display:"flex",gap:12,marginTop:20,position:"relative",zIndex:1}}>
+          {[
+            {n:favorites.length,l:"Favourites"},
+            {n:"7",l:"Days planned"},
+            {n:"21",l:"Meals cooked"},
+          ].map(s=>(
+            <div key={s.l} style={{flex:1,background:"rgba(255,255,255,0.1)",
+              borderRadius:12,padding:"10px 8px",textAlign:"center",
+              border:"0.5px solid rgba(255,255,255,0.15)"}}>
+              <p style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:20,
+                fontWeight:800,color:"white",margin:0}}>{s.n}</p>
+              <p style={{fontSize:10,color:"rgba(255,255,255,0.6)",margin:0,
+                fontFamily:"'Nunito',sans-serif"}}>{s.l}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Current preferences */}
+      <div style={{margin:"16px 20px 0",padding:"14px 16px",borderRadius:16,
+        background:"white",border:`1px solid ${C.border}`}}>
+        <p style={{fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.06em",
+          color:C.muted,margin:"0 0 10px",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+          Your kitchen profile</p>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+          {vegOpt&&<span style={{fontSize:12,padding:"5px 12px",borderRadius:20,
+            background:C.selBg,color:C.selTxt,fontWeight:600,
+            fontFamily:"'Nunito',sans-serif"}}>{vegOpt.emoji} {vegOpt.label}</span>}
+          {dietOpt&&<span style={{fontSize:12,padding:"5px 12px",borderRadius:20,
+            background:C.selBg,color:C.selTxt,fontWeight:600,
+            fontFamily:"'Nunito',sans-serif"}}>{dietOpt.emoji} {dietOpt.label}</span>}
+        </div>
+      </div>
+
+      {/* Menu items */}
+      <div style={{margin:"12px 20px 0",borderRadius:16,overflow:"hidden",
+        border:`1px solid ${C.border}`}}>
+        {MENU.map((item,i)=>(
+          <div key={item.label}
+            style={{display:"flex",alignItems:"center",gap:12,padding:"14px 16px",
+              background:"white",
+              borderBottom:i<MENU.length-1?`1px solid ${C.border}`:"none",
+              cursor:"pointer"}}>
+            <div style={{width:36,height:36,borderRadius:12,background:C.subtle,
+              display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+              <MS name={item.icon} size={18} color={C.saffron}/>
+            </div>
+            <div style={{flex:1,minWidth:0}}>
+              <p style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:14,
+                fontWeight:700,color:C.ink,margin:0}}>{item.label}</p>
+              <p style={{fontSize:12,color:C.muted,margin:0,
+                fontFamily:"'Nunito',sans-serif"}}>{item.sub}</p>
+            </div>
+            <MS name="chevron_right" size={18} color={C.border}/>
+          </div>
+        ))}
+      </div>
+
+      <p style={{textAlign:"center",fontSize:11,color:C.muted,marginTop:20,
+        fontFamily:"'Nunito',sans-serif",fontStyle:"italic"}}>
+        Mealio v2.0 · Made with ❤️ for homemakers</p>
+    </div>
+  );
+}
+
 function BottomNav({screen,onNavigate}){
   const items=[
     {icon:"home",           label:"Today",    key:"checkin"},
@@ -1087,7 +1240,7 @@ function BottomNav({screen,onNavigate}){
         const on=active===it.key;
         return (
           <button key={it.key}
-            onClick={()=>["checkin","pantry","leftovers"].includes(it.key)&&onNavigate(it.key)}
+            onClick={()=>onNavigate(it.key)}
             style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:3,
               padding:"10px 0 4px",background:"none",border:"none",cursor:"pointer"}}>
             <MS name={it.icon} size={22} fill={on?1:0} color={on?C.saffron:C.muted}/>
@@ -1650,7 +1803,7 @@ function MealCarousel({slot,ranked,index,onIndex,accent,addOns,available,favorit
           <span style={{display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:700,
             textTransform:"uppercase",letterSpacing:"0.06em",color:C.muted}}>
             <span style={{fontSize:16}}>{EMO[slot]}</span>{slot}</span>
-          <button onClick={()=>onFav(dish.name)} style={{background:"none",border:"none",
+          <button onClick={(e)=>{e.stopPropagation();onFav(dish.name);}} style={{background:"none",border:"none",
             cursor:"pointer",padding:4}}>
             <Heart size={18} fill={isFav?"#E02858":"none"} color={isFav?"#E02858":C.muted}/>
           </button>
@@ -1827,8 +1980,8 @@ export default function Mealio(){
   const newDay=()=>{setLeftovers([]);setMood(null);setCarouselIndex({breakfast:0,lunch:0,dinner:0});go("leftovers");};
   const fullReset=()=>{setPantry([]);setExpiring([]);setLeftovers([]);setMood(null);setCarouselIndex({breakfast:0,lunch:0,dinner:0});go("prefs");};
 
-  const APP_SCREENS=["prefs","pantry","leftovers","checkin","loading","results"];
-  const STEP_MAP={prefs:1,pantry:2,leftovers:3,checkin:4,loading:4,results:5};
+  const APP_SCREENS=["prefs","pantry","leftovers","checkin","loading","results","planner","saved","profile"];
+  const STEP_MAP={prefs:1,pantry:2,leftovers:3,checkin:4,loading:4,results:5,planner:null,saved:null,profile:null};
   const acc=eColor(energy);
   const isApp=APP_SCREENS.includes(screen);
 
@@ -1872,6 +2025,8 @@ export default function Mealio(){
             />
             <div style={{flex:1,overflowY:"auto",paddingBottom:72}}>
               {screen==="planner"  && <WeekPlannerScreen weekPlan={weekPlan} setWeekPlan={setWeekPlan} vegPref={vegPref} diet={diet}/>}
+              {screen==="saved"    && <SavedScreen favorites={favorites} plan={plan}/>}
+              {screen==="profile"  && <ProfileScreen vegPref={vegPref} diet={diet} favorites={favorites}/>}
               {screen==="prefs"    && <PrefsScreen vegPref={vegPref} setVegPref={setVegPref}
                                         diet={diet} setDiet={setDiet} onNext={()=>go("pantry")}/>}
               {screen==="pantry"   && <PantryScreen vegPref={vegPref} diet={diet}
@@ -1914,8 +2069,7 @@ export default function Mealio(){
             </div>
           <BottomNav screen={screen} onNavigate={s=>{
             if(s==="checkin"&&screen==="results") newDay();
-            else if(s==="planner") go("planner");
-            else if(["pantry","leftovers","checkin"].includes(s)) go(s);
+            else go(s);
           }}/>
           </div>
         )}
