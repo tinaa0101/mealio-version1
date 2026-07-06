@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useMemo } from "react";
 import {
   ArrowRight, Phone, Lock, ChevronLeft, ChevronRight,
   Clock, Heart, PlayCircle, ShoppingBag, Plus, Check,
-  Mic, Minus, RefreshCw, ClipboardList, Utensils
+  Mic, Minus, RefreshCw, ClipboardList, Utensils, X
 } from "lucide-react";
 
 // ─── LOGO ────────────────────────────────────────────────────────────────────
@@ -525,7 +525,7 @@ function LoginScreen({onLogin}){
 
 // ─── OTP ─────────────────────────────────────────────────────────────────────
 function OTPScreen({phone,onVerify,onBack}){
-  const [digits,setDigits]=useState(["","","","","",""]);
+  const [digits,setDigits]=useState(["","","",""]);
   const inputRefs=useRef([]);
   const verifyRef=useRef(null);
   const code=digits.join("");
@@ -533,8 +533,8 @@ function OTPScreen({phone,onVerify,onBack}){
   const handleDigit=(i,val)=>{
     if(!/^\d?$/.test(val))return;
     const n=[...digits];n[i]=val;setDigits(n);
-    if(val&&i<5) inputRefs.current[i+1]?.focus();
-    else if(val&&i===5) setTimeout(()=>verifyRef.current?.focus(),80);
+    if(val&&i<3) inputRefs.current[i+1]?.focus();
+    else if(val&&i===3) setTimeout(()=>verifyRef.current?.focus(),80);
     if(!val&&i>0)inputRefs.current[i-1]?.focus();
   };
   const handleKey=(i,e)=>{
@@ -584,11 +584,11 @@ function OTPScreen({phone,onVerify,onBack}){
           </div>
           <p style={{fontSize:12,color:C.muted,marginTop:12,
             fontFamily:"'Nunito',sans-serif",textAlign:"center",fontStyle:"italic"}}>
-            Demo — any 6 digits will work!</p>
+            Demo — any 4 digits will work!</p>
           <div style={{marginTop:28}}>
-            <PrimaryBtn label="Verify & Continue" disabled={code.length<6}
+            <PrimaryBtn label="Verify & Continue" disabled={code.length<4}
               btnRef={verifyRef}
-              onClick={()=>code.length===6&&onVerify()}/>
+              onClick={()=>code.length===4&&onVerify()}/>
           </div>
           <button style={{display:"block",width:"100%",marginTop:14,background:"none",
             border:"none",fontSize:13,color:C.muted,
@@ -1070,6 +1070,159 @@ function WeekPlannerScreen({weekPlan,setWeekPlan,vegPref,diet}){
   );
 }
 
+
+function SavedScreen({favorites,plan}){
+  // Collect dish details from favorites list
+  const allDishes=[...DISHES.breakfast,...DISHES.lunch,...DISHES.dinner];
+  const savedDishes=allDishes.filter(d=>favorites.includes(d.name))
+    .filter((d,i,arr)=>arr.findIndex(x=>x.name===d.name)===i);
+  const SLOT_EMO={breakfast:"🌅",lunch:"☀️",dinner:"🌙"};
+  const getSlot=name=>{
+    if(DISHES.breakfast.find(d=>d.name===name)) return "breakfast";
+    if(DISHES.lunch.find(d=>d.name===name)) return "lunch";
+    return "dinner";
+  };
+  return (
+    <div style={{padding:"20px 20px 40px",minHeight:"60vh"}}>
+      <h2 style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:22,fontWeight:800,
+        color:C.ink,margin:"0 0 4px"}}>❤️ Saved Dishes</h2>
+      <p style={{fontSize:13,color:C.muted,margin:"0 0 20px",fontFamily:"'Nunito',sans-serif",
+        fontStyle:"italic"}}>Your all-time favourites, always ready to suggest</p>
+      {savedDishes.length===0?(
+        <div style={{marginTop:40,textAlign:"center",padding:"32px 24px",borderRadius:20,
+          background:"white",border:`1.5px dashed ${C.border}`}}>
+          <span style={{fontSize:52,display:"block",marginBottom:14}}>🍽️</span>
+          <p style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:17,fontWeight:800,
+            color:C.ink,margin:"0 0 8px"}}>Nothing saved yet!</p>
+          <p style={{fontSize:13,color:C.muted,margin:0,fontFamily:"'Nunito',sans-serif",
+            lineHeight:1.7}}>Tap the ❤️ on any dish card<br/>to save it here for quick access</p>
+        </div>
+      ):(
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+          {savedDishes.map(d=>{
+            const slot=getSlot(d.name);
+            const yt=`https://www.youtube.com/results?search_query=${encodeURIComponent(d.name+" recipe")}`;
+            return (
+              <div key={d.name} style={{background:"white",borderRadius:16,padding:"14px 16px",
+                border:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:12}}>
+                <span style={{fontSize:22,flexShrink:0}}>{SLOT_EMO[slot]}</span>
+                <div style={{flex:1,minWidth:0}}>
+                  <p style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:14,fontWeight:700,
+                    color:C.ink,margin:0}}>{d.name}</p>
+                  <p style={{fontSize:11,color:C.muted,margin:"2px 0 0",
+                    fontFamily:"'Nunito',sans-serif"}}>⏱ {d.time}m · {d.protein}g protein · {d.kcal} kcal</p>
+                </div>
+                <a href={yt} target="_blank" rel="noopener noreferrer"
+                  style={{display:"flex",alignItems:"center",flexShrink:0}}>
+                  <YTIcon/>
+                </a>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── PROFILE SCREEN ───────────────────────────────────────────────────────────
+function ProfileScreen({vegPref,diet,favorites}){
+  const vegOpt=VEG_OPTIONS.find(v=>v.key===vegPref);
+  const dietOpt=DIET_OPTIONS.find(d=>d.key===diet);
+  const MENU=[
+    {icon:"restaurant_menu",label:"My Meal Preferences",sub:"Veg, diet style, allergies"},
+    {icon:"family_restroom",label:"Family Profiles",sub:"Add members & their preferences"},
+    {icon:"calendar_month",label:"Meal History",sub:"What you've eaten this month"},
+    {icon:"notifications",label:"Reminders",sub:"Meal planning nudges"},
+    {icon:"share",label:"Share Mealio",sub:"Invite friends & family"},
+    {icon:"help_outline",label:"Help & Feedback",sub:"We'd love to hear from you"},
+  ];
+  return (
+    <div style={{paddingBottom:40}}>
+      {/* Profile hero */}
+      <div style={{background:`linear-gradient(135deg,${C.dark1},#3A2818)`,
+        padding:"40px 24px 28px",isolation:"isolate",position:"relative"}}>
+        <GlowBlob color={C.saffron} opacity={0.12} blur={50} x="60%" y="0%" size={160}/>
+        <div style={{display:"flex",alignItems:"center",gap:16,position:"relative",zIndex:1}}>
+          <div style={{width:64,height:64,borderRadius:32,
+            background:`linear-gradient(135deg,${C.saffron},${C.red})`,
+            display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+            <span style={{fontSize:28,fontWeight:800,color:"white",
+              fontFamily:"'Plus Jakarta Sans',sans-serif"}}>T</span>
+          </div>
+          <div>
+            <p style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:20,fontWeight:800,
+              color:"white",margin:0}}>Tinaa</p>
+            <p style={{fontSize:12,color:"rgba(255,255,255,0.6)",margin:"2px 0 0",
+              fontFamily:"'Nunito',sans-serif"}}>Home chef · Hyderabad</p>
+          </div>
+        </div>
+        {/* Quick stats */}
+        <div style={{display:"flex",gap:12,marginTop:20,position:"relative",zIndex:1}}>
+          {[
+            {n:favorites.length,l:"Favourites"},
+            {n:"7",l:"Days planned"},
+            {n:"21",l:"Meals cooked"},
+          ].map(s=>(
+            <div key={s.l} style={{flex:1,background:"rgba(255,255,255,0.1)",
+              borderRadius:12,padding:"10px 8px",textAlign:"center",
+              border:"0.5px solid rgba(255,255,255,0.15)"}}>
+              <p style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:20,
+                fontWeight:800,color:"white",margin:0}}>{s.n}</p>
+              <p style={{fontSize:10,color:"rgba(255,255,255,0.6)",margin:0,
+                fontFamily:"'Nunito',sans-serif"}}>{s.l}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Current preferences */}
+      <div style={{margin:"16px 20px 0",padding:"14px 16px",borderRadius:16,
+        background:"white",border:`1px solid ${C.border}`}}>
+        <p style={{fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.06em",
+          color:C.muted,margin:"0 0 10px",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+          Your kitchen profile</p>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+          {vegOpt&&<span style={{fontSize:12,padding:"5px 12px",borderRadius:20,
+            background:C.selBg,color:C.selTxt,fontWeight:600,
+            fontFamily:"'Nunito',sans-serif"}}>{vegOpt.emoji} {vegOpt.label}</span>}
+          {dietOpt&&<span style={{fontSize:12,padding:"5px 12px",borderRadius:20,
+            background:C.selBg,color:C.selTxt,fontWeight:600,
+            fontFamily:"'Nunito',sans-serif"}}>{dietOpt.emoji} {dietOpt.label}</span>}
+        </div>
+      </div>
+
+      {/* Menu items */}
+      <div style={{margin:"12px 20px 0",borderRadius:16,overflow:"hidden",
+        border:`1px solid ${C.border}`}}>
+        {MENU.map((item,i)=>(
+          <div key={item.label}
+            style={{display:"flex",alignItems:"center",gap:12,padding:"14px 16px",
+              background:"white",
+              borderBottom:i<MENU.length-1?`1px solid ${C.border}`:"none",
+              cursor:"pointer"}}>
+            <div style={{width:36,height:36,borderRadius:12,background:C.subtle,
+              display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+              <MS name={item.icon} size={18} color={C.saffron}/>
+            </div>
+            <div style={{flex:1,minWidth:0}}>
+              <p style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:14,
+                fontWeight:700,color:C.ink,margin:0}}>{item.label}</p>
+              <p style={{fontSize:12,color:C.muted,margin:0,
+                fontFamily:"'Nunito',sans-serif"}}>{item.sub}</p>
+            </div>
+            <MS name="chevron_right" size={18} color={C.border}/>
+          </div>
+        ))}
+      </div>
+
+      <p style={{textAlign:"center",fontSize:11,color:C.muted,marginTop:20,
+        fontFamily:"'Nunito',sans-serif",fontStyle:"italic"}}>
+        Mealio v2.0 · Made with ❤️ for homemakers</p>
+    </div>
+  );
+}
+
 function BottomNav({screen,onNavigate}){
   const items=[
     {icon:"home",           label:"Today",    key:"checkin"},
@@ -1087,7 +1240,7 @@ function BottomNav({screen,onNavigate}){
         const on=active===it.key;
         return (
           <button key={it.key}
-            onClick={()=>["checkin","pantry","leftovers"].includes(it.key)&&onNavigate(it.key)}
+            onClick={()=>onNavigate(it.key)}
             style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:3,
               padding:"10px 0 4px",background:"none",border:"none",cursor:"pointer"}}>
             <MS name={it.icon} size={22} fill={on?1:0} color={on?C.saffron:C.muted}/>
@@ -1268,86 +1421,141 @@ function PantryScreen({vegPref,diet,staples,setStaples,pantry,setPantry,expiring
 }
 
 // ─── LEFTOVERS SCREEN ────────────────────────────────────────────────────────
-function LeftoversScreen({leftovers,setLeftovers,onNext}){
-  const [inp,setInp]=useState("");
-  const QTY={1:"A little",2:"Decent amount",3:"A lot"};
+function LeftoversScreen({leftovers,setLeftovers,onNext,isFlow=false}){
+  const [showPicker,setShowPicker]=useState(false);
+  const [customInp,setCustomInp]=useState("");
+  const QTY={1:"A little",2:"Some",3:"A lot"};
   const toggle=chip=>{
-    if(leftovers.find(l=>l.key===chip.key))setLeftovers(ls=>ls.filter(l=>l.key!==chip.key));
+    if(leftovers.find(l=>l.key===chip.key))
+      setLeftovers(ls=>ls.filter(l=>l.key!==chip.key));
     else setLeftovers(ls=>[...ls,{...chip,qty:1}]);
   };
-  const adj=(key,d)=>setLeftovers(ls=>ls.map(l=>l.key===key?{...l,qty:Math.max(0,Math.min(3,l.qty+d))}:l).filter(l=>l.qty>0));
-  const addCustom=()=>{const v=inp.trim().toLowerCase();if(!v)return;if(!leftovers.find(l=>l.key===v))setLeftovers(ls=>[...ls,{key:v,label:v,emoji:"🍱",qty:1}]);setInp("");};
+  const adj=(key,d)=>setLeftovers(ls=>
+    ls.map(l=>l.key===key?{...l,qty:Math.max(0,Math.min(3,l.qty+d))}:l).filter(l=>l.qty>0));
+  const remove=key=>setLeftovers(ls=>ls.filter(l=>l.key!==key));
+  const addCustom=()=>{
+    const v=customInp.trim().toLowerCase();
+    if(!v)return;
+    if(!leftovers.find(l=>l.key===v))
+      setLeftovers(ls=>[...ls,{key:v,label:v,emoji:"🍱",qty:1}]);
+    setCustomInp("");setShowPicker(false);
+  };
   return (
     <div style={{padding:"20px 20px 40px"}}>
-      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16}}>
-        <span style={{fontSize:36}}>♻️</span>
-        <div>
-          <h2 style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:22,fontWeight:800,
-            color:C.ink,margin:0}}>Anything left from yesterday?</h2>
-          <p style={{fontSize:13,color:C.muted,margin:0,fontFamily:"'Nunito',sans-serif",
-            fontStyle:"italic"}}>We'll transform these — not just reheat!</p>
+      {/* Header row with Add button */}
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <span style={{fontSize:28}}>♻️</span>
+          <div>
+            <h2 style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:20,fontWeight:800,
+              color:C.ink,margin:0,lineHeight:1.2}}>Leftovers</h2>
+            <p style={{fontSize:12,color:C.muted,margin:0,fontFamily:"'Nunito',sans-serif",
+              fontStyle:"italic"}}>Used first in your daily plan</p>
+          </div>
         </div>
+        <button onClick={()=>setShowPicker(v=>!v)}
+          style={{display:"flex",alignItems:"center",gap:6,padding:"9px 14px",borderRadius:14,
+            border:`1.5px solid ${showPicker?C.saffron:C.border}`,
+            background:showPicker?C.selBg:"white",color:showPicker?C.selTxt:C.ink,
+            fontSize:13,fontWeight:700,cursor:"pointer",
+            fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+          <Plus size={15}/> Add
+        </button>
       </div>
-      <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:16}}>
-        {LEFTOVER_CHIPS.map(chip=>{
-          const added=leftovers.find(l=>l.key===chip.key);
-          return (
-            <button key={chip.key} onClick={()=>toggle(chip)}
-              style={{display:"flex",alignItems:"center",gap:6,borderRadius:20,padding:"8px 14px",
-                fontSize:13,fontWeight:500,cursor:"pointer",
-                border:`1.5px solid ${added?C.saffron:C.border}`,
-                background:added?C.selBg:C.card,color:added?C.selTxt:C.ink}}>
-              <span style={{fontSize:16,lineHeight:1}}>{chip.emoji}</span>
-              {chip.label}{added&&<Check size={12} color={C.saffron}/>}
-            </button>
-          );
-        })}
-      </div>
-      <div style={{display:"flex",alignItems:"center",gap:8,borderRadius:14,
-        border:`1px solid ${C.border}`,background:C.card,padding:"10px 12px",marginBottom:20}}>
-        <input value={inp} onChange={e=>setInp(e.target.value)}
-          onKeyDown={e=>e.key==="Enter"&&addCustom()}
-          placeholder='Something else? e.g. "biryani"'
-          style={{flex:1,minWidth:0,border:"none",outline:"none",fontSize:14,
-            color:C.ink,background:"transparent",fontFamily:"'Nunito',sans-serif"}}/>
-        <button onClick={addCustom} style={{background:C.subtle,border:"none",
-          borderRadius:8,padding:"4px 8px",cursor:"pointer"}}>
-          <Plus size={14} color={C.saffron}/></button>
-      </div>
-      {leftovers.length>0&&(
-        <div style={{marginBottom:28}}>
-          <p style={{fontSize:12,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.06em",
-            color:C.muted,marginBottom:8,fontFamily:"'Plus Jakarta Sans',sans-serif"}}>How much is left?</p>
-          <div style={{display:"flex",flexDirection:"column",gap:8}}>
-            {leftovers.map(l=>(
-              <div key={l.key} style={{display:"flex",alignItems:"center",justifyContent:"space-between",
-                borderRadius:14,padding:"12px 16px",background:C.card,border:`1px solid ${C.border}`}}>
-                <span style={{display:"flex",alignItems:"center",gap:8,fontSize:14,fontWeight:600,color:C.ink}}>
-                  <span>{l.emoji}</span>{l.label}
-                  <span style={{fontSize:11,color:C.muted,fontWeight:400}}>{QTY[l.qty]}</span>
-                </span>
-                <div style={{display:"flex",alignItems:"center",gap:10}}>
-                  <button onClick={()=>adj(l.key,-1)} style={{width:28,height:28,borderRadius:"50%",
-                    border:`1px solid ${C.border}`,background:"white",cursor:"pointer",
-                    display:"flex",alignItems:"center",justifyContent:"center"}}>
-                    <Minus size={13} color={C.muted}/>
-                  </button>
-                  <span style={{fontSize:14,fontWeight:700,color:C.ink,minWidth:16,textAlign:"center"}}>{l.qty}</span>
-                  <button onClick={()=>adj(l.key,1)} style={{width:28,height:28,borderRadius:"50%",
-                    border:`1px solid ${C.saffron}`,background:C.selBg,cursor:"pointer",
-                    display:"flex",alignItems:"center",justifyContent:"center"}}>
-                    <Plus size={13} color={C.saffron}/>
-                  </button>
-                </div>
-              </div>
+
+      {/* Quick-add picker */}
+      {showPicker&&(
+        <div style={{marginTop:12,padding:14,borderRadius:16,background:"white",
+          border:`1px solid ${C.border}`,animation:"fadeSlideUp 0.2s ease both"}}>
+          <p style={{fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.06em",
+            color:C.muted,margin:"0 0 10px",fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Quick add</p>
+          <div style={{display:"flex",flexWrap:"wrap",gap:7,marginBottom:12}}>
+            {LEFTOVER_CHIPS.filter(c=>!leftovers.find(l=>l.key===c.key)).map(chip=>(
+              <button key={chip.key} onClick={()=>toggle(chip)}
+                style={{display:"flex",alignItems:"center",gap:5,borderRadius:20,
+                  padding:"7px 13px",fontSize:13,fontWeight:600,cursor:"pointer",
+                  border:`1.5px solid ${C.border}`,background:C.subtle,color:C.ink}}>
+                <span style={{fontSize:16}}>{chip.emoji}</span>{chip.label}
+              </button>
             ))}
+          </div>
+          <div style={{display:"flex",gap:8}}>
+            <input value={customInp} onChange={e=>setCustomInp(e.target.value)}
+              onKeyDown={e=>e.key==="Enter"&&addCustom()}
+              placeholder='Something else? e.g. "biryani"'
+              style={{flex:1,border:`1px solid ${C.border}`,borderRadius:12,
+                padding:"10px 12px",fontSize:13,color:C.ink,
+                fontFamily:"'Nunito',sans-serif",outline:"none"}}/>
+            <button onClick={addCustom}
+              style={{padding:"10px 16px",borderRadius:12,border:"none",
+                background:C.saffron,color:"white",fontSize:13,fontWeight:700,
+                cursor:"pointer"}}>Add</button>
           </div>
         </div>
       )}
-      <PrimaryBtn label="Next: how are you feeling" onClick={onNext}/>
-      <button onClick={onNext} style={{display:"block",width:"100%",marginTop:12,background:"none",
-        border:"none",fontSize:13,color:C.muted,fontFamily:"'Nunito',sans-serif",
-        cursor:"pointer",fontWeight:600}}>No leftovers today — skip</button>
+
+      {/* Leftovers list */}
+      {leftovers.length===0?(
+        <div style={{marginTop:24,padding:28,borderRadius:16,background:"white",
+          border:`1.5px dashed ${C.border}`,textAlign:"center"}}>
+          <span style={{fontSize:40,display:"block",marginBottom:8}}>🍱</span>
+          <p style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:15,fontWeight:700,
+            color:C.ink,margin:"0 0 4px"}}>Nothing here yet</p>
+          <p style={{fontSize:13,color:C.muted,margin:0,fontFamily:"'Nunito',sans-serif",
+            fontStyle:"italic"}}>Tap "+ Add" to log what's in the fridge</p>
+        </div>
+      ):(
+        <div style={{display:"flex",flexDirection:"column",gap:8,marginTop:16}}>
+          {leftovers.map(l=>(
+            <div key={l.key} style={{display:"flex",alignItems:"center",gap:12,
+              padding:"12px 14px",borderRadius:14,background:"white",
+              border:`1px solid ${C.border}`}}>
+              <span style={{fontSize:22,flexShrink:0}}>{l.emoji}</span>
+              <div style={{flex:1,minWidth:0}}>
+                <p style={{fontSize:14,fontWeight:700,color:C.ink,margin:0,
+                  fontFamily:"'Plus Jakarta Sans',sans-serif",
+                  textTransform:"capitalize"}}>{l.label}</p>
+                <p style={{fontSize:11,color:C.muted,margin:0,
+                  fontFamily:"'Nunito',sans-serif"}}>{QTY[l.qty]}</p>
+              </div>
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                <button onClick={()=>adj(l.key,-1)}
+                  style={{width:28,height:28,borderRadius:"50%",
+                    border:`1px solid ${C.border}`,background:"white",cursor:"pointer",
+                    display:"flex",alignItems:"center",justifyContent:"center"}}>
+                  <Minus size={13} color={C.muted}/>
+                </button>
+                <span style={{fontSize:14,fontWeight:700,color:C.ink,
+                  minWidth:16,textAlign:"center"}}>{l.qty}</span>
+                <button onClick={()=>adj(l.key,1)}
+                  style={{width:28,height:28,borderRadius:"50%",
+                    border:`1px solid ${C.saffron}`,background:C.selBg,cursor:"pointer",
+                    display:"flex",alignItems:"center",justifyContent:"center"}}>
+                  <Plus size={13} color={C.saffron}/>
+                </button>
+              </div>
+              <button onClick={()=>remove(l.key)}
+                style={{width:28,height:28,borderRadius:"50%",background:"#FFF0F0",
+                  border:"1px solid #FFD0D0",cursor:"pointer",flexShrink:0,
+                  display:"flex",alignItems:"center",justifyContent:"center"}}>
+                <X size={13} color={C.red}/>
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Subtle continue — only inside meal brain flow */}
+      {isFlow&&(
+        <button onClick={onNext}
+          style={{marginTop:28,display:"flex",alignItems:"center",justifyContent:"center",
+            gap:6,width:"100%",padding:"12px",borderRadius:14,
+            border:`1px solid ${C.border}`,background:"white",
+            color:C.muted,fontSize:13,fontWeight:600,cursor:"pointer",
+            fontFamily:"'Nunito',sans-serif"}}>
+          Continue to check-in <ArrowRight size={14}/>
+        </button>
+      )}
     </div>
   );
 }
@@ -1532,25 +1740,42 @@ function MissingGroceries({items}){
 function LeftoverTransforms({leftovers}){
   const txs=leftovers.flatMap(l=>LEFTOVER_TRANSFORMS[l.key]||[]);
   if(!txs.length)return null;
+  const SLOT_ICON={breakfast:"🌅",lunch:"☀️",dinner:"🌙"};
   return (
     <div style={{borderRadius:16,overflow:"hidden",marginBottom:12}}>
       <div style={{height:3,background:"linear-gradient(90deg,#4A9B6A,#8ECC2E)"}}/>
       <div style={{padding:16,background:"#F0FAF3",border:"1px solid #B6DFC2",borderTop:"none"}}>
-        <p style={{fontSize:13,fontWeight:700,color:"#2A6B45",margin:"0 0 10px",
+        <p style={{fontSize:13,fontWeight:700,color:"#2A6B45",margin:"0 0 12px",
           display:"flex",alignItems:"center",gap:6}}>♻️ Transform your leftovers first</p>
-        <div style={{display:"flex",flexDirection:"column",gap:8}}>
-          {txs.map((tr,i)=>(
-            <div key={i} style={{display:"flex",alignItems:"center",gap:10}}>
-              <span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:10,
-                textTransform:"capitalize",background:"#C8E8D4",color:"#2A6B45",flexShrink:0}}>
-                {tr.slot}</span>
-              <div style={{flex:1,minWidth:0}}>
-                <p style={{fontSize:13,fontWeight:600,color:"#1E4D32",margin:0}}>{tr.name}</p>
-                <p style={{fontSize:11,color:"#4A7A5C",margin:0}}>{tr.note}</p>
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+          {txs.map((tr,i)=>{
+            const yt=`https://www.youtube.com/results?search_query=${encodeURIComponent(tr.name+" leftover recipe")}`;
+            return (
+              <div key={i} style={{display:"flex",alignItems:"center",gap:10}}>
+                {/* Fixed-width circular slot icon — no text, no alignment issues */}
+                <div style={{width:30,height:30,borderRadius:"50%",background:"#C8E8D4",
+                  display:"flex",alignItems:"center",justifyContent:"center",
+                  flexShrink:0,fontSize:15,lineHeight:1}}>
+                  {SLOT_ICON[tr.slot]||"🍽️"}
+                </div>
+                <div style={{flex:1,minWidth:0}}>
+                  <p style={{fontSize:13,fontWeight:700,color:"#1E4D32",margin:0,
+                    fontFamily:"'Plus Jakarta Sans',sans-serif"}}>{tr.name}</p>
+                  <p style={{fontSize:11,color:"#4A7A5C",margin:"2px 0 0",
+                    fontStyle:"italic",fontFamily:"'Nunito',sans-serif"}}>{tr.note}</p>
+                </div>
+                <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
+                  <span style={{fontSize:11,color:"#4A7A5C",fontFamily:"'Nunito',sans-serif"}}>
+                    {tr.time}m</span>
+                  <a href={yt} target="_blank" rel="noopener noreferrer"
+                    title="Watch leftover recipe on YouTube"
+                    style={{display:"flex",alignItems:"center"}}>
+                    <YTIcon/>
+                  </a>
+                </div>
               </div>
-              <span style={{fontSize:11,color:"#4A7A5C",flexShrink:0}}>{tr.time}m</span>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>
@@ -1578,7 +1803,7 @@ function MealCarousel({slot,ranked,index,onIndex,accent,addOns,available,favorit
           <span style={{display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:700,
             textTransform:"uppercase",letterSpacing:"0.06em",color:C.muted}}>
             <span style={{fontSize:16}}>{EMO[slot]}</span>{slot}</span>
-          <button onClick={()=>onFav(dish.name)} style={{background:"none",border:"none",
+          <button onClick={(e)=>{e.stopPropagation();onFav(dish.name);}} style={{background:"none",border:"none",
             cursor:"pointer",padding:4}}>
             <Heart size={18} fill={isFav?"#E02858":"none"} color={isFav?"#E02858":C.muted}/>
           </button>
@@ -1721,6 +1946,7 @@ export default function Mealio(){
   const [favorites,setFavorites]=useState([]);
   const [horizon,setHorizon]=useState("day");
   const [weekPlan,setWeekPlan]=useState({});
+  const [prevScreen,setPrevScreen]=useState(null);
   // Daily
   const [pantry,setPantry]=useState([]);
   const [expiring,setExpiring]=useState([]);
@@ -1750,12 +1976,12 @@ export default function Mealio(){
     return r;
   },[screen,available,expiring,time,energy,diet,vegPref,favorites,lkeys,horizon]);
 
-  const go=s=>setScreen(s);
+  const go=s=>{setPrevScreen(screen);setScreen(s);};
   const newDay=()=>{setLeftovers([]);setMood(null);setCarouselIndex({breakfast:0,lunch:0,dinner:0});go("leftovers");};
   const fullReset=()=>{setPantry([]);setExpiring([]);setLeftovers([]);setMood(null);setCarouselIndex({breakfast:0,lunch:0,dinner:0});go("prefs");};
 
-  const APP_SCREENS=["prefs","pantry","leftovers","checkin","loading","results"];
-  const STEP_MAP={prefs:1,pantry:2,leftovers:3,checkin:4,loading:4,results:5};
+  const APP_SCREENS=["prefs","pantry","leftovers","checkin","loading","results","planner","saved","profile"];
+  const STEP_MAP={prefs:1,pantry:2,leftovers:3,checkin:4,loading:4,results:5,planner:null,saved:null,profile:null};
   const acc=eColor(energy);
   const isApp=APP_SCREENS.includes(screen);
 
@@ -1799,6 +2025,8 @@ export default function Mealio(){
             />
             <div style={{flex:1,overflowY:"auto",paddingBottom:72}}>
               {screen==="planner"  && <WeekPlannerScreen weekPlan={weekPlan} setWeekPlan={setWeekPlan} vegPref={vegPref} diet={diet}/>}
+              {screen==="saved"    && <SavedScreen favorites={favorites} plan={plan}/>}
+              {screen==="profile"  && <ProfileScreen vegPref={vegPref} diet={diet} favorites={favorites}/>}
               {screen==="prefs"    && <PrefsScreen vegPref={vegPref} setVegPref={setVegPref}
                                         diet={diet} setDiet={setDiet} onNext={()=>go("pantry")}/>}
               {screen==="pantry"   && <PantryScreen vegPref={vegPref} diet={diet}
@@ -1807,7 +2035,8 @@ export default function Mealio(){
                                         expiring={expiring} setExpiring={setExpiring}
                                         onNext={()=>go("leftovers")}/>}
               {screen==="leftovers"&& <LeftoversScreen leftovers={leftovers}
-                                        setLeftovers={setLeftovers} onNext={()=>go("checkin")}/>}
+                                        setLeftovers={setLeftovers} onNext={()=>go("checkin")}
+                                        isFlow={prevScreen==="pantry"}/>}
               {screen==="checkin"  && <CheckinScreen horizon={horizon} energy={energy}
                                         setEnergy={setEnergy} time={time} setTime={setTime}
                                         mood={mood} setMood={setMood}
@@ -1840,8 +2069,7 @@ export default function Mealio(){
             </div>
           <BottomNav screen={screen} onNavigate={s=>{
             if(s==="checkin"&&screen==="results") newDay();
-            else if(s==="planner") go("planner");
-            else if(["pantry","leftovers","checkin"].includes(s)) go(s);
+            else go(s);
           }}/>
           </div>
         )}
